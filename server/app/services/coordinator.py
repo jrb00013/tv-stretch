@@ -4,9 +4,12 @@ import json
 import uuid
 from typing import Any
 
+import structlog
 from sqlmodel import Session
 
 from app.models import EventLog, Room, SessionState, utcnow
+
+logger = structlog.get_logger(__name__)
 
 
 def build_handoff_commands(
@@ -80,6 +83,14 @@ def apply_handoff(
         )
     )
     session.commit()
+
+    logger.info(
+        "handoff_applied",
+        home_id=str(home_id),
+        active_room_id=str(active_room_id),
+        batch_id=batch_id,
+        source=source,
+    )
 
     cmds = build_handoff_commands(
         batch_id=batch_id,
