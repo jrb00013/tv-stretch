@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
 import structlog
@@ -44,7 +44,9 @@ class CommandQueue:
             created_at=utcnow(),
         )
         self._pending[bid] = batch
-        logger.info("command_batch_enqueued", batch_id=bid, home_id=str(home_id), count=len(commands))
+        logger.info(
+            "command_batch_enqueued", batch_id=bid, home_id=str(home_id), count=len(commands)
+        )
         return bid
 
     def get(self, batch_id: str) -> CommandBatch | None:

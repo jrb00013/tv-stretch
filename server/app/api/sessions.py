@@ -5,10 +5,9 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 from sqlalchemy import desc
-from sqlmodel import Session, select
+from sqlmodel import select
 
-from app.db import get_session
-from app.models import EventLog, Home, Node, SessionState
+from app.models import EventLog, Node, SessionState
 from app.security.auth import AuthenticatedHome, require_home_auth
 from app.security.rate_limit import limiter
 from app.services import coordinator as coord

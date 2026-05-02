@@ -2,10 +2,9 @@ from __future__ import annotations
 
 import uuid
 from contextlib import asynccontextmanager
-from typing import Any
 
 import structlog
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, Request
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.config import settings
@@ -46,7 +45,9 @@ class LoggingMiddleware(BaseHTTPMiddleware):
             raise
         finally:
             if response is not None:
-                logger.info("request_finished", status_code=response.status_code, request_id=request_id)
+                logger.info(
+                    "request_finished", status_code=response.status_code, request_id=request_id
+                )
 
         return response
 

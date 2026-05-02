@@ -4,9 +4,8 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
-from sqlmodel import Session, select
+from sqlmodel import select
 
-from app.db import get_session
 from app.models import Node, Room
 from app.security.auth import AuthenticatedHome, require_home_auth
 from app.security.rate_limit import limiter
@@ -42,9 +41,7 @@ def create_room(
 def list_rooms(
     auth: AuthenticatedHome = Depends(require_home_auth),
 ) -> list[RoomRead]:
-    rows = list(
-        auth.session.exec(select(Room).where(Room.home_id == auth.home.id)).all()
-    )
+    rows = list(auth.session.exec(select(Room).where(Room.home_id == auth.home.id)).all())
     return [RoomRead(id=r.id, home_id=r.home_id, name=r.name) for r in rows]
 
 

@@ -5,9 +5,8 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
-from sqlmodel import Session, select
+from sqlmodel import select
 
-from app.db import get_session
 from app.models import Node, Room
 from app.security.auth import AuthenticatedHome, require_home_auth
 from app.security.rate_limit import limiter
@@ -64,7 +63,9 @@ def register_node(
         select(Node).where(Node.home_id == auth.home.id, Node.room_id == body.room_id)
     ).first()
     if existing:
-        raise HTTPException(status_code=409, detail="node already exists for this room; delete first")
+        raise HTTPException(
+            status_code=409, detail="node already exists for this room; delete first"
+        )
 
     api_key = secrets.token_urlsafe(32)
     n = Node(home_id=auth.home.id, room_id=body.room_id, name=body.name, api_key=api_key)

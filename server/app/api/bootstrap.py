@@ -25,7 +25,9 @@ class BootstrapOut(BaseModel):
 
 
 @router.post("/home-with-rooms", response_model=BootstrapOut)
-def bootstrap_home_with_rooms(body: BootstrapIn, session: Session = Depends(get_session)) -> BootstrapOut:
+def bootstrap_home_with_rooms(
+    body: BootstrapIn, session: Session = Depends(get_session)
+) -> BootstrapOut:
     token = secrets.token_urlsafe(32)
     h = Home(name=body.home_name, control_token=token)
     session.add(h)

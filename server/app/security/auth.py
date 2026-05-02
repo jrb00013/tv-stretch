@@ -1,8 +1,6 @@
 from __future__ import annotations
 
-import uuid
 from dataclasses import dataclass
-from typing import Any
 
 import structlog
 from fastapi import Depends, HTTPException, Request, status
@@ -42,7 +40,10 @@ def require_home_auth(
     logger.warning("auth_failed", ip=client_ip, path=request.url.path)
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
-        detail={"error": "invalid_or_missing_control_token", "message": "Valid X-Control-Token header required"},
+        detail={
+            "error": "invalid_or_missing_control_token",
+            "message": "Valid X-Control-Token header required",
+        },
     )
 
 

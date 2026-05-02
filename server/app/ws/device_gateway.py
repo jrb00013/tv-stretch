@@ -105,7 +105,11 @@ async def ws_device(websocket: WebSocket) -> None:
                         from app.models import utcnow
 
                         n.last_seen_at = utcnow()
-                        fv = msg.get("node", {}).get("fw") if isinstance(msg.get("node"), dict) else None
+                        fv = (
+                            msg.get("node", {}).get("fw")
+                            if isinstance(msg.get("node"), dict)
+                            else None
+                        )
                         if isinstance(fv, str):
                             n.firmware_version = fv
                         s.add(n)

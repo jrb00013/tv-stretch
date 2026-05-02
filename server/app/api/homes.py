@@ -41,7 +41,9 @@ class HomeDetail(BaseModel):
 
 @router.post("", response_model=HomeCreated)
 @limiter.limit("5/minute")
-def create_home(request: Request, body: HomeCreate, session: Session = Depends(get_session)) -> Home:
+def create_home(
+    request: Request, body: HomeCreate, session: Session = Depends(get_session)
+) -> Home:
     token = secrets.token_urlsafe(32)
     h = Home(name=body.name, control_token=token)
     session.add(h)
@@ -63,12 +65,8 @@ def list_homes(
 def get_current_home(
     auth: AuthenticatedHome = Depends(require_home_auth),
 ) -> HomeDetail:
-    room_count = len(
-        list(auth.session.exec(select(Room).where(Room.home_id == auth.home.id)))
-    )
-    node_count = len(
-        list(auth.session.exec(select(Node).where(Node.home_id == auth.home.id)))
-    )
+    room_count = len(list(auth.session.exec(select(Room).where(Room.home_id == auth.home.id))))
+    node_count = len(list(auth.session.exec(select(Node).where(Node.home_id == auth.home.id))))
     return HomeDetail(
         id=auth.home.id,
         name=auth.home.name,

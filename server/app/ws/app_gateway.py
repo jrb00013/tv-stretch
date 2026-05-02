@@ -25,7 +25,9 @@ def _parse_bearer(auth_header: str | None) -> str | None:
 
 @router.websocket("/ws/app")
 async def ws_app(websocket: WebSocket) -> None:
-    token = _parse_bearer(websocket.headers.get("authorization")) or websocket.query_params.get("token")
+    token = _parse_bearer(websocket.headers.get("authorization")) or websocket.query_params.get(
+        "token"
+    )
     home_raw = (
         websocket.headers.get("x-tv-stretch-home")
         or websocket.query_params.get("home_id")
@@ -41,7 +43,9 @@ async def ws_app(websocket: WebSocket) -> None:
         return
 
     with Session(db_module.engine) as session:
-        h = session.exec(select(Home).where(Home.id == home_id, Home.control_token == token)).first()
+        h = session.exec(
+            select(Home).where(Home.id == home_id, Home.control_token == token)
+        ).first()
         if h is None:
             await websocket.close(code=4401)
             return
@@ -77,7 +81,9 @@ async def ws_app(websocket: WebSocket) -> None:
                         source="app_ws",
                     )
                 await push_command_batch(home_id, cmds, batch_id=batch_id)
-                await websocket.send_text(json.dumps({"v": 1, "type": "handoff_applied", "batch_id": batch_id}))
+                await websocket.send_text(
+                    json.dumps({"v": 1, "type": "handoff_applied", "batch_id": batch_id})
+                )
             elif msg.get("type") == "ping":
                 await websocket.send_text(json.dumps({"v": 1, "type": "pong"}))
     except WebSocketDisconnect:
