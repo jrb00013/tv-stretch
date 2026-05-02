@@ -36,7 +36,6 @@ app = FastAPI(
     version=settings.api_version,
     lifespan=lifespan,
     docs_url="/docs" if settings.debug else None,
-    redoc_url="/redoc" if settings.debug else None,
 )
 
 _origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
