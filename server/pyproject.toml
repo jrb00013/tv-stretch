@@ -13,6 +13,9 @@ dependencies = [
     "uvicorn[standard]>=0.30.0",
     "sqlmodel>=0.0.22",
     "pydantic-settings>=2.0.0",
+    "slowapi>=0.1.9",
+    "structlog>=24.0.0",
+    "python-multipart>=0.0.12",
 ]
 
 [project.optional-dependencies]
