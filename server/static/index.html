@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="description" content="tv-stretch coordinator — browser lab for REST handoff and /ws/app presence" />
+  <meta name="description" content="tv-stretch coordinator — REST, /ws/app presence, /ws/device simulator, full handoff lab" />
   <title>tv-stretch · control</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -240,7 +240,8 @@
       </div>
       <div class="badges">
         <span id="badge-api" class="badge">API …</span>
-        <span id="badge-ws" class="badge">WS idle</span>
+        <span id="badge-ws" class="badge">app WS idle</span>
+        <span id="badge-dev" class="badge">device WS idle</span>
       </div>
     </header>
 
@@ -296,6 +297,10 @@
         <select id="roomSelect"><option value="">— load rooms first —</option></select>
         <label for="cref">content_ref (optional)</label>
         <input id="cref" placeholder="opaque string for your app" />
+        <div class="checkbox-row">
+          <input type="checkbox" id="standbyRest" checked />
+          <label for="standbyRest" style="margin:0;font-weight:400;">standby_others (policy on non-active TVs)</label>
+        </div>
         <div class="btn-row">
           <button type="button" class="primary" id="btnHandoff">POST /sessions/handoff</button>
           <button type="button" id="btnEvents">GET /sessions/events</button>
@@ -314,15 +319,41 @@
     </div>
 
     <section class="panel" style="margin-top:1.25rem">
+      <h2>Device simulator · /ws/device</h2>
+      <p class="hint" style="margin-top:0">
+        Mimics an ESP32 node: uses the same WS host as the app channel. Auth via query
+        <code>?home_id=&amp;token=</code> (node <code>api_key</code>) so browsers work without custom headers.
+      </p>
+      <label for="deviceApiKey">Node api_key</label>
+      <input id="deviceApiKey" type="password" autocomplete="off" placeholder="from POST /nodes/register" />
+      <div class="btn-row">
+        <button type="button" id="btnRegisterNode">Register node for selected room</button>
+        <button type="button" class="primary" id="devConnect">Connect device WS</button>
+        <button type="button" id="devHello">Send hello</button>
+        <button type="button" id="devHb">Send heartbeat</button>
+        <button type="button" class="danger" id="devDisconnect">Disconnect</button>
+      </div>
+      <div class="checkbox-row">
+        <input type="checkbox" id="devAutoAck" checked />
+        <label for="devAutoAck" style="margin:0;font-weight:400;">Auto-ack each command_batch (like firmware)</label>
+      </div>
+    </section>
+
+    <section class="panel" style="margin-top:1.25rem">
       <h2>WebSocket · /ws/app</h2>
       <p class="hint" style="margin-top:0">Browsers cannot set <code>Authorization</code> on WebSockets reliably — auth is passed as query params (token is masked in the log).</p>
       <label for="wshost">WS host (no query string)</label>
       <input id="wshost" value="127.0.0.1:8000" autocomplete="off" />
       <label for="originTip">Public base URL (tips / OTA)</label>
       <input id="originTip" type="url" value="http://127.0.0.1:8000" />
+      <div class="checkbox-row">
+        <input type="checkbox" id="standbyWs" checked />
+        <label for="standbyWs" style="margin:0;font-weight:400;">standby_others on presence messages</label>
+      </div>
       <div class="btn-row">
         <button type="button" class="primary" id="connect">Connect</button>
         <button type="button" id="send">Send presence</button>
+        <button type="button" id="btnWsSession">Send get_session</button>
         <button type="button" id="ping">Ping</button>
         <button type="button" class="danger" id="disconnect">Disconnect</button>
       </div>
@@ -337,7 +368,8 @@
 
     <footer>
       OpenAPI docs: <a id="linkDocs" href="/docs">/docs</a> ·
-      Device gateway is <code>/ws/device</code> (nodes). This UI targets the app channel only.
+      App channel <code>/ws/app</code> (presence, <code>get_session</code>, ping) ·
+      Device channel <code>/ws/device</code> (hello, heartbeat, ack, event).
     </footer>
   </div>
 
@@ -347,6 +379,7 @@
   const logEl = $("log");
   const LS_PREFIX = "tvstretch:";
   let sock = null;
+  let devSock = null;
 
   function ts() {
     return new Date().toISOString().slice(11, 23);
@@ -380,6 +413,9 @@
       wshost: $("wshost").value,
       home: $("home").value,
       originTip: $("originTip").value,
+      standbyRest: $("standbyRest").checked,
+      standbyWs: $("standbyWs").checked,
+      deviceApiKey: $("deviceApiKey").value,
     };
     try {
       localStorage.setItem(LS_PREFIX + "prefs", JSON.stringify(o));
@@ -403,6 +439,9 @@
         if (o.wshost) $("wshost").value = o.wshost;
         if (o.home) $("home").value = o.home;
         if (o.originTip) $("originTip").value = o.originTip;
+        if (typeof o.standbyRest === "boolean") $("standbyRest").checked = o.standbyRest;
+        if (typeof o.standbyWs === "boolean") $("standbyWs").checked = o.standbyWs;
+        if (o.deviceApiKey) $("deviceApiKey").value = o.deviceApiKey;
       }
       const tok = localStorage.getItem(LS_PREFIX + "token");
       if (tok) {
@@ -518,7 +557,7 @@
       return;
     }
     const cref = $("cref").value.trim();
-    const body = { active_room_id: room };
+    const body = { active_room_id: room, standby_others: $("standbyRest").checked };
     if (cref) body.content_ref = cref;
     try {
       const r = await fetch(base + "/sessions/handoff", {
@@ -619,9 +658,53 @@
   }
 
   function setWsBadge(state) {
-    if (state === "open") setBadge("badge-ws", "WS live", true);
-    else if (state === "closed") setBadge("badge-ws", "WS idle", null);
-    else setBadge("badge-ws", "WS …", null);
+    if (state === "open") setBadge("badge-ws", "app WS live", true);
+    else if (state === "closed") setBadge("badge-ws", "app WS idle", null);
+    else setBadge("badge-ws", "app WS …", null);
+  }
+
+  function setDevBadge(state) {
+    if (state === "open") setBadge("badge-dev", "device WS live", true);
+    else if (state === "closed") setBadge("badge-dev", "device WS idle", null);
+    else setBadge("badge-dev", "device WS …", null);
+  }
+
+  function buildDevWsUrl() {
+    const host = $("wshost").value.trim().replace(/^\/+/, "");
+    const home = $("home").value.trim();
+    const apiKey = $("deviceApiKey").value.trim();
+    const proto = host.startsWith("localhost") || host.startsWith("127.") ? "ws" : "wss";
+    const u = new URL(proto + "://" + host.replace(/^https?:\/\//i, ""));
+    u.pathname = "/ws/device";
+    u.searchParams.set("home_id", home);
+    u.searchParams.set("token", apiKey);
+    return u.toString();
+  }
+
+  async function registerNodeForRoom() {
+    const base = apiBase();
+    const room = $("roomSelect").value;
+    if (!base || !room) {
+      log("Select a room (GET /rooms) first");
+      return;
+    }
+    try {
+      const r = await fetch(base + "/nodes/register", {
+        method: "POST",
+        headers: authHeaders(true),
+        body: JSON.stringify({ room_id: room, name: "ui-" + Date.now().toString(36) }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        log("POST /nodes/register failed", r.status, JSON.stringify(j));
+        return;
+      }
+      $("deviceApiKey").value = j.api_key || "";
+      saveFields();
+      log("Registered node", j.node_id, "— api_key filled (stored if you Save)");
+    } catch (e) {
+      log("register node error:", String(e));
+    }
   }
 
   $("connect").onclick = () => {
@@ -673,7 +756,7 @@
         log("WS not open");
         return;
       }
-      const msg = { v: 1, type: "presence", active_room_id: rid };
+      const msg = { v: 1, type: "presence", active_room_id: rid, standby_others: $("standbyWs").checked };
       if (cref) msg.content_ref = cref;
       sock.send(JSON.stringify(msg));
       log(">>", JSON.stringify(msg));
@@ -694,6 +777,102 @@
       log(">> ping");
     }, 250);
   };
+
+  $("btnWsSession").onclick = () => {
+    if (!sock || sock.readyState !== WebSocket.OPEN) {
+      $("connect").click();
+    }
+    setTimeout(() => {
+      if (!sock || sock.readyState !== WebSocket.OPEN) {
+        log("WS not open");
+        return;
+      }
+      sock.send(JSON.stringify({ v: 1, type: "get_session" }));
+      log(">> get_session");
+    }, 250);
+  };
+
+  $("devConnect").onclick = () => {
+    const url = buildDevWsUrl();
+    if (devSock) {
+      try {
+        devSock.close();
+      } catch (e) {}
+    }
+    log("[device] connecting", url.replace(/token=[^&]+/, "token=***"));
+    devSock = new WebSocket(url);
+    setDevBadge("conn");
+    devSock.onopen = () => {
+      log("[device] ws open");
+      setDevBadge("open");
+    };
+    devSock.onclose = () => {
+      log("[device] ws closed");
+      setDevBadge("closed");
+    };
+    devSock.onerror = () => log("[device] ws error");
+    devSock.onmessage = (ev) => {
+      log("[device]<<", ev.data);
+      if (!$("devAutoAck").checked) return;
+      try {
+        const j = JSON.parse(ev.data);
+        if (j.type === "command_batch" && j.batch_id) {
+          devSock.send(
+            JSON.stringify({ v: 1, type: "ack", batch_id: j.batch_id, ok: true })
+          );
+          log("[device]>> ack", j.batch_id);
+        }
+      } catch (_) {}
+    };
+  };
+
+  $("devDisconnect").onclick = () => {
+    if (devSock) {
+      try {
+        devSock.close();
+      } catch (e) {}
+      devSock = null;
+    }
+    setDevBadge("closed");
+    log("[device] disconnect");
+  };
+
+  $("devHello").onclick = () => {
+    const home = $("home").value.trim();
+    const room = $("roomSelect").value;
+    if (!devSock || devSock.readyState !== WebSocket.OPEN) {
+      $("devConnect").click();
+    }
+    setTimeout(() => {
+      if (!devSock || devSock.readyState !== WebSocket.OPEN) {
+        log("[device] WS not open");
+        return;
+      }
+      const payload = {
+        v: 1,
+        type: "hello",
+        node: { room_id: room || "", home_id: home, fw: "ui-simulator" },
+      };
+      devSock.send(JSON.stringify(payload));
+      log("[device]>> hello");
+    }, 300);
+  };
+
+  $("devHb").onclick = () => {
+    if (!devSock || devSock.readyState !== WebSocket.OPEN) {
+      $("devConnect").click();
+    }
+    setTimeout(() => {
+      if (!devSock || devSock.readyState !== WebSocket.OPEN) {
+        log("[device] WS not open");
+        return;
+      }
+      devSock.send(JSON.stringify({ v: 1, type: "heartbeat" }));
+      log("[device]>> heartbeat");
+    }, 250);
+  };
+
+  $("btnRegisterNode").onclick = registerNodeForRoom;
 
   $("clearLog").onclick = () => {
     logEl.textContent = "";
