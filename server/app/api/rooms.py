@@ -2,18 +2,19 @@ from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
 from app.db import get_session
-from app.models import Home, Node, Room
+from app.models import Node, Room
+from app.security.auth import AuthenticatedHome, require_home_auth
+from app.security.rate_limit import limiter
 
 router = APIRouter(prefix="/rooms", tags=["rooms"])
 
 
 class RoomCreate(BaseModel):
-    home_id: uuid.UUID
     name: str = "room"
 
 
@@ -24,39 +25,50 @@ class RoomRead(BaseModel):
 
 
 @router.post("", response_model=RoomRead)
-def create_room(body: RoomCreate, session: Session = Depends(get_session)) -> Room:
-    if session.get(Home, body.home_id) is None:
-        raise HTTPException(status_code=404, detail="home not found")
-    r = Room(home_id=body.home_id, name=body.name)
-    session.add(r)
-    session.commit()
-    session.refresh(r)
-    return r
+@limiter.limit("20/minute")
+def create_room(
+    request: Request,
+    body: RoomCreate,
+    auth: AuthenticatedHome = Depends(require_home_auth),
+) -> RoomRead:
+    r = Room(home_id=auth.home.id, name=body.name)
+    auth.session.add(r)
+    auth.session.commit()
+    auth.session.refresh(r)
+    return RoomRead(id=r.id, home_id=r.home_id, name=r.name)
 
 
 @router.get("", response_model=list[RoomRead])
-def list_rooms(home_id: uuid.UUID | None = None, session: Session = Depends(get_session)) -> list[Room]:
-    q = select(Room)
-    if home_id is not None:
-        q = q.where(Room.home_id == home_id)
-    return list(session.exec(q).all())
+def list_rooms(
+    auth: AuthenticatedHome = Depends(require_home_auth),
+) -> list[RoomRead]:
+    rows = list(
+        auth.session.exec(select(Room).where(Room.home_id == auth.home.id)).all()
+    )
+    return [RoomRead(id=r.id, home_id=r.home_id, name=r.name) for r in rows]
 
 
 @router.get("/{room_id}", response_model=RoomRead)
-def get_room(room_id: uuid.UUID, session: Session = Depends(get_session)) -> Room:
-    r = session.get(Room, room_id)
-    if r is None:
+def get_room(
+    room_id: uuid.UUID,
+    auth: AuthenticatedHome = Depends(require_home_auth),
+) -> RoomRead:
+    r = auth.session.get(Room, room_id)
+    if r is None or r.home_id != auth.home.id:
         raise HTTPException(status_code=404, detail="room not found")
-    return r
+    return RoomRead(id=r.id, home_id=r.home_id, name=r.name)
 
 
 @router.delete("/{room_id}", status_code=204)
-def delete_room(room_id: uuid.UUID, session: Session = Depends(get_session)) -> None:
-    r = session.get(Room, room_id)
-    if r is None:
+def delete_room(
+    room_id: uuid.UUID,
+    auth: AuthenticatedHome = Depends(require_home_auth),
+) -> None:
+    r = auth.session.get(Room, room_id)
+    if r is None or r.home_id != auth.home.id:
         raise HTTPException(status_code=404, detail="room not found")
-    n = session.exec(select(Node).where(Node.room_id == room_id)).first()
+    n = auth.session.exec(select(Node).where(Node.room_id == room_id)).first()
     if n:
         raise HTTPException(status_code=409, detail="room has nodes; delete nodes first")
-    session.delete(r)
-    session.commit()
+    auth.session.delete(r)
+    auth.session.commit()
