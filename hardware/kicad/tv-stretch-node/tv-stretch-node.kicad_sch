@@ -1,0 +1,128 @@
+(kicad_sch
+  (version 20231120)
+  (generator "eeschema")
+  (generator_version "8.0")
+  (uuid "73ee58b7-84aa-4deb-8b57-804bcd5ae690")
+  (paper "A4")
+  (title_block
+    (title "tv-stretch-node")
+    (date "2026-05-02")
+    (rev "A")
+    (comment 1 "ESP32-C3 HDMI CEC node — see docs/BOM.md")
+    (comment 2 "Add USB-C AP2112 decoupling per datasheet in layout")
+    (comment 3 "")
+    (comment 4 "")
+  )
+
+  (lib_symbols)
+
+  (symbol
+    (lib_id "tv_stretch:ESP32_C3_MINI")
+    (at 63.5 80.01 0)
+    (unit 1)
+    (exclude_from_sim no)
+    (in_bom yes)
+    (on_board yes)
+    (dnp no)
+    (uuid "2c90ba2d-9dd8-41a2-affc-1b66627afd92")
+    (property "Reference" "U1"
+      (at 63.5 59.69 0)
+      (effects (font (size 1.27 1.27)))
+    )
+    (property "Value" "ESP32-C3-MINI-1"
+      (at 63.5 100.33 0)
+      (effects (font (size 1.27 1.27)))
+    )
+    (property "Footprint" "MODULE:ESP32-C3-MINI-1"
+      (at 63.5 80.01 0)
+      (effects (font (size 1.27 1.27)) hide)
+    )
+    (property "Datasheet" "https://www.espressif.com/"
+      (at 63.5 80.01 0)
+      (effects (font (size 1.27 1.27)) hide)
+    )
+    (pin "1" (uuid "a9a9ff82-0d13-4b51-a33d-44f6e625b192"))
+    (pin "2" (uuid "e3a2dfcd-0dc1-484e-90f8-4adf6a6685ad"))
+    (pin "3" (uuid "e5fc6682-98f8-41ee-ad2c-ba8109653e32"))
+    (pin "4" (uuid "010d7e40-b62e-446f-a1f7-379f31291bd1"))
+    (pin "5" (uuid "d21976f1-f4ff-4079-a17e-66f67e6b2f16"))
+    (pin "6" (uuid "21e7a65b-4d24-4020-91ef-c51d9271886b"))
+    (instances
+      (project "tv-stretch-node"
+        (path "/9366cbb6-f580-42d2-bbad-17ba578aca97"
+          (reference "U1")
+          (unit 1)
+        )
+      )
+    )
+  )
+
+  (symbol
+    (lib_id "tv_stretch:HDMI_CEC_TAP")
+    (at 120.65 80.01 0)
+    (unit 1)
+    (exclude_from_sim no)
+    (in_bom yes)
+    (on_board yes)
+    (dnp no)
+    (uuid "5de01857-b4aa-400f-8aee-e5aa3485648e")
+    (property "Reference" "J2"
+      (at 120.65 92.71 0)
+      (effects (font (size 1.27 1.27)))
+    )
+    (property "Value" "HDMI_A"
+      (at 120.65 67.31 0)
+      (effects (font (size 1.27 1.27)))
+    )
+    (property "Footprint" ""
+      (at 120.65 80.01 0)
+      (effects (font (size 1.27 1.27)) hide)
+    )
+    (property "Datasheet" "~"
+      (at 120.65 80.01 0)
+      (effects (font (size 1.27 1.27)) hide)
+    )
+    (pin "13" (uuid "7aafba8f-9431-4d5d-baea-98cc1200a84b"))
+    (pin "17" (uuid "12a8943f-b90b-4ae2-bc6b-0455a42cd77b"))
+    (pin "18" (uuid "e114516c-7f0e-4b42-bc58-577ee18e78a2"))
+    (instances
+      (project "tv-stretch-node"
+        (path "/9366cbb6-f580-42d2-bbad-17ba578aca97"
+          (reference "J2")
+          (unit 1)
+        )
+      )
+    )
+  )
+
+  (wire
+    (pts (xy 80.01 87.63) (xy 110.49 83.82))
+    (stroke (width 0) (type default))
+    (uuid "4f61d15f-bcc4-4966-b033-476d08b621e9")
+  )
+
+  (global_label "CEC_GPIO"
+    (shape input)
+    (at 95.25 87.63 0)
+    (fields_autoplaced yes)
+    (effects (font (size 1.27 1.27)) (justify left))
+    (uuid "fbb8305b-3ecd-4b4b-a204-87b6641a945e")
+    (property "Intersheetrefs" "${INTERSHEET_REFS}"
+      (at 95.25 86.3599 0)
+      (hide yes)
+      (effects (font (size 1.27 1.27)) (justify left) hide)
+    )
+  )
+
+  (text "Add U2 AP2112, J1 USB-C, D1 ESD, R1 CEC pull-up per docs/BOM.md"
+    (at 24.13 24.13 0)
+    (effects (font (size 2.54 2.54)) (justify left bottom))
+    (uuid "25865d88-3d56-4fe8-bbc3-dea4fd4fae77")
+  )
+
+  (sheet_instances
+    (path "/" (page "1"))
+  )
+
+  (embedded_fonts no)
+)
