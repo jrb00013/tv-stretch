@@ -25,7 +25,7 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 Open `http://localhost:8000/` (redirects to the control UI) or `http://localhost:8000/docs` for OpenAPI.
 
-**Browser control UI** (`/ui/`): dark-themed lab for ping/ready, one-click **bootstrap** (`POST /bootstrap/home-with-rooms`), authenticated **REST** (rooms, session, handoff, events, node health), optional **localStorage** for the control token, and **WebSocket** presence on `/ws/app` (token masked in the log). Full curl / WebSocket flows: [docs/API.md](docs/API.md). Provisioning + OTA: [docs/PROVISIONING_AND_OTA.md](docs/PROVISIONING_AND_OTA.md).
+**Browser control UI** (`/ui/`): dark-themed lab for ping/ready, one-click **bootstrap** (`POST /bootstrap/home-with-rooms`), authenticated **REST** (rooms, session, handoff with `standby_others`, events, node health), optional **localStorage** for the control token, **app WebSocket** (`/ws/app`: presence, `get_session`, ping) and a **device simulator** for `/ws/device` (query auth, auto-ack, hello/heartbeat) so you can exercise full handoff → command_batch → ack without hardware. Full protocol: [docs/API.md](docs/API.md). Provisioning + OTA: [docs/PROVISIONING_AND_OTA.md](docs/PROVISIONING_AND_OTA.md).
 
 From the repo root, `./scripts/dev.sh` or `make dev` runs uvicorn with a local SQLite DB (after `pip install -e ".[dev]"` in `server/`).
 

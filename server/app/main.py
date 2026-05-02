@@ -37,6 +37,10 @@ app = FastAPI(
     version=settings.api_version,
     lifespan=lifespan,
     docs_url="/docs" if settings.debug else None,
+    description=(
+        "Coordinator API for tv-stretch: SQLite-backed homes/rooms/nodes, REST handoffs, "
+        "app WebSocket presence (`/ws/app`), and device command batches (`/ws/device`)."
+    ),
 )
 
 _origins = [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
