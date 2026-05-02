@@ -21,6 +21,24 @@ def test_ready(client: TestClient) -> None:
     assert r.json()["status"] == "ready"
 
 
+def test_handoff_without_standby_omits_policy(client: TestClient) -> None:
+    h = client.post("/homes", json={"name": "hs"})
+    token = h.json().get("control_token")
+    headers = {"X-Control-Token": token}
+    client.post("/rooms", json={"name": "a"}, headers=headers)
+    r2 = client.post("/rooms", json={"name": "b"}, headers=headers)
+    room_b = r2.json()["id"]
+    ho = client.post(
+        "/sessions/handoff",
+        json={"active_room_id": room_b, "standby_others": False},
+        headers=headers,
+    )
+    assert ho.status_code == 200
+    cmds = ho.json()["commands"]
+    assert not any(c.get("cmd") == "policy" for c in cmds)
+    assert any(c.get("cmd") == "cec_broadcast_ping" for c in cmds)
+
+
 def test_handoff_flow(client: TestClient) -> None:
     h = client.post("/homes", json={"name": "h1"})
     assert h.status_code == 200
