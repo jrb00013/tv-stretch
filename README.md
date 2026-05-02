@@ -23,7 +23,11 @@ export TV_STRETCH_DATABASE_URL="sqlite:///./tv_stretch.db"
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-Open `http://localhost:8000/docs` for OpenAPI. Browser control UI: `http://localhost:8000/ui/`. Full curl / WebSocket flows: [docs/API.md](docs/API.md). Provisioning + OTA: [docs/PROVISIONING_AND_OTA.md](docs/PROVISIONING_AND_OTA.md).
+Open `http://localhost:8000/` (redirects to the control UI) or `http://localhost:8000/docs` for OpenAPI.
+
+**Browser control UI** (`/ui/`): dark-themed lab for ping/ready, one-click **bootstrap** (`POST /bootstrap/home-with-rooms`), authenticated **REST** (rooms, session, handoff, events, node health), optional **localStorage** for the control token, and **WebSocket** presence on `/ws/app` (token masked in the log). Full curl / WebSocket flows: [docs/API.md](docs/API.md). Provisioning + OTA: [docs/PROVISIONING_AND_OTA.md](docs/PROVISIONING_AND_OTA.md).
+
+From the repo root, `./scripts/dev.sh` or `make dev` runs uvicorn with a local SQLite DB (after `pip install -e ".[dev]"` in `server/`).
 
 **Breaking note (0.2+):** `Home` rows require `control_token`. Delete old `tv_stretch.db` or recreate homes after upgrading.
 
