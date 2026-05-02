@@ -25,11 +25,11 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
 Open `http://localhost:8000/` (redirects to the control UI) or `http://localhost:8000/docs` for OpenAPI.
 
-**Browser control UI** (`/ui/`): dark-themed lab for ping/ready, one-click **bootstrap** (`POST /bootstrap/home-with-rooms`), authenticated **REST** (rooms, session, handoff with `standby_others`, events, node health), optional **localStorage** for the control token, **app WebSocket** (`/ws/app`: presence, `get_session`, ping) and a **device simulator** for `/ws/device` (query auth, auto-ack, hello/heartbeat) so you can exercise full handoff → command_batch → ack without hardware. Full protocol: [docs/API.md](docs/API.md). Provisioning + OTA: [docs/PROVISIONING_AND_OTA.md](docs/PROVISIONING_AND_OTA.md).
+**Browser control UI** (`/ui/`): sticky section nav, API **version chip** (from `/health/ready`), **diagnostics** (`GET /diagnostics/overview` and per-home **live** sockets), dark-themed **bootstrap**, authenticated **REST**, **app** and **device** WebSocket labs, **log** export (download + **Ctrl+Shift+S**) and clear (**Ctrl+Shift+L**). Assets: `server/static/css/`, `server/static/js/`, `server/static/assets/favicon.svg`. Full protocol: [docs/API.md](docs/API.md). Provisioning + OTA: [docs/PROVISIONING_AND_OTA.md](docs/PROVISIONING_AND_OTA.md).
+
+Server package version is **0.5.0** (`pyproject.toml` / `TV_STRETCH_*` defaults).
 
 From the repo root, `./scripts/dev.sh` or `make dev` runs uvicorn with a local SQLite DB (after `pip install -e ".[dev]"` in `server/`).
-
-The browser UI under `server/static/` is split into `css/app.css` and ES modules in `server/static/js/` (entry `main.js`) instead of a single huge HTML file.
 
 **Breaking note (0.2+):** `Home` rows require `control_token`. Delete old `tv_stretch.db` or recreate homes after upgrading.
 

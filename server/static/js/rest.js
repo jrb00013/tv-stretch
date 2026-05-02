@@ -17,13 +17,24 @@ export async function pingApi(ctx) {
     const j = await r.json().catch(() => ({}));
     if (r.ok) {
       setBadge($, "badge-api", "API v" + (j.version || "?"), true);
+      const chip = $("apiVersion");
+      if (chip) {
+        chip.textContent = j.version ? "v" + j.version : "";
+        chip.hidden = !j.version;
+      }
+      const foot = $("footerApiHint");
+      if (foot && j.version) foot.textContent = "v" + j.version + " · SQLite coordinator";
       log("GET /health/ready →", j.status || j);
     } else {
       setBadge($, "badge-api", "API error " + r.status, false);
+      const chip = $("apiVersion");
+      if (chip) chip.hidden = true;
       log("GET /health/ready failed", r.status);
     }
   } catch (e) {
     setBadge($, "badge-api", "API unreachable", false);
+    const chip = $("apiVersion");
+    if (chip) chip.hidden = true;
     log("Ping failed:", String(e));
   }
 }
@@ -255,3 +266,50 @@ export async function registerNodeForRoom(ctx) {
     log("register node error:", String(e));
   }
 }
+
+/** @param {ReturnType<import('./context.js').bootUi>} ctx */
+export async function fetchDiagnosticsOverview(ctx) {
+  const { $, log, apiBase } = ctx;
+  const base = apiBase();
+  if (!base) return log("Set API base URL");
+  const box = /** @type {HTMLElement} */ ($("diagPreview"));
+  try {
+    const r = await fetch(base + "/diagnostics/overview");
+    const j = await r.json().catch(() => ({}));
+    if (r.ok) {
+      box.textContent = JSON.stringify(j, null, 2);
+      box.hidden = false;
+      log("GET /diagnostics/overview → ok");
+    } else {
+      log("diagnostics overview failed", r.status);
+    }
+  } catch (e) {
+    log("diagnostics overview error:", String(e));
+  }
+}
+
+/** @param {ReturnType<import('./context.js').bootUi>} ctx */
+export async function fetchDiagnosticsLive(ctx) {
+  const { $, log, apiBase } = ctx;
+  const base = apiBase();
+  const hid = /** @type {HTMLInputElement} */ ($("home")).value.trim();
+  if (!base || !hid) {
+    log("Set API URL and home UUID first");
+    return;
+  }
+  const box = /** @type {HTMLElement} */ ($("diagPreview"));
+  try {
+    const r = await fetch(base + "/diagnostics/homes/" + encodeURIComponent(hid) + "/live");
+    const j = await r.json().catch(() => ({}));
+    if (r.ok) {
+      box.textContent = JSON.stringify(j, null, 2);
+      box.hidden = false;
+      log("GET /diagnostics/homes/…/live → ok");
+    } else {
+      log("diagnostics live failed", r.status, JSON.stringify(j));
+    }
+  } catch (e) {
+    log("diagnostics live error:", String(e));
+  }
+}
+

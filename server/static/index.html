@@ -3,8 +3,10 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="description" content="tv-stretch coordinator — REST, /ws/app presence, /ws/device simulator, full handoff lab" />
+  <meta name="description" content="tv-stretch coordinator — REST, WebSockets, diagnostics, full lab" />
+  <meta name="theme-color" content="#0c0e11" />
   <title>tv-stretch · control</title>
+  <link rel="icon" href="/ui/assets/favicon.svg" type="image/svg+xml" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Outfit:wght@400;600;700&display=swap" rel="stylesheet" />
@@ -12,20 +14,33 @@
 </head>
 <body>
   <div class="wrap">
-    <header>
-      <div>
-        <h1>tv-stretch</h1>
-        <p class="tagline">Room-aware TV coordination — REST handoffs, session state, and WebSocket presence for <code style="font-family:var(--font-mono);font-size:0.9em;">/ws/app</code>.</p>
+    <header class="site-header">
+      <div class="header-main">
+        <div class="title-row">
+          <h1>tv-stretch</h1>
+          <span id="apiVersion" class="version-chip" hidden></span>
+        </div>
+        <p class="tagline">Room-aware TV coordination — REST handoffs, session state, WebSocket presence on <code>/ws/app</code>, device batches on <code>/ws/device</code>.</p>
       </div>
-      <div class="badges">
+      <div class="badges" aria-label="Connection status">
         <span id="badge-api" class="badge">API …</span>
         <span id="badge-ws" class="badge">app WS idle</span>
         <span id="badge-dev" class="badge">device WS idle</span>
       </div>
     </header>
 
+    <nav class="site-nav" aria-label="Page sections">
+      <a href="#credentials">Credentials</a>
+      <a href="#bootstrap">Bootstrap</a>
+      <a href="#sessions">Sessions</a>
+      <a href="#diag">Diagnostics</a>
+      <a href="#device">Device</a>
+      <a href="#app-ws">App WS</a>
+      <a href="#log">Log</a>
+    </nav>
+
     <div class="grid grid-2">
-      <section class="panel">
+      <section id="credentials" class="panel">
         <h2>API & credentials</h2>
         <label for="apiOrigin">API base URL</label>
         <input id="apiOrigin" type="url" autocomplete="off" placeholder="http://127.0.0.1:8000" />
@@ -49,7 +64,7 @@
         <p class="hint">Authenticated calls use the <code>X-Control-Token</code> header (same token as WebSocket query).</p>
       </section>
 
-      <section class="panel">
+      <section id="bootstrap" class="panel">
         <h2>Quick bootstrap</h2>
         <p class="hint" style="margin-top:0">Creates a home + rooms in one shot (no auth). Copies IDs into the form.</p>
         <label for="bootHomeName">Home name</label>
@@ -62,8 +77,8 @@
       </section>
     </div>
 
-    <div class="grid grid-2" style="margin-top:1.25rem">
-      <section class="panel">
+    <div class="grid grid-2 panel-gap">
+      <section id="sessions" class="panel">
         <h2>Rooms & handoff (REST)</h2>
         <div class="flex-between">
           <span><span class="status-dot" id="dotSession"></span><span id="sessionLabel">No session loaded</span></span>
@@ -87,9 +102,9 @@
         <div id="sessionPreview" class="json-preview" hidden></div>
       </section>
 
-      <section class="panel">
+      <section id="health" class="panel">
         <h2>Node health</h2>
-        <p class="hint" style="margin-top:0">Connected ESP nodes for this home.</p>
+        <p class="hint" style="margin-top:0">ESP nodes registered for this home (last seen / firmware).</p>
         <div class="btn-row">
           <button type="button" id="btnHealth">GET /sessions/health</button>
         </div>
@@ -97,7 +112,17 @@
       </section>
     </div>
 
-    <section class="panel" style="margin-top:1.25rem">
+    <section id="diag" class="panel panel-gap">
+      <h2>Diagnostics</h2>
+      <p class="hint" style="margin-top:0">Server-wide counts + WebSocket hub snapshot; “live” uses the home UUID field.</p>
+      <div class="btn-row">
+        <button type="button" class="primary" id="btnDiagOverview">GET /diagnostics/overview</button>
+        <button type="button" id="btnDiagLive">GET /diagnostics/homes/{id}/live</button>
+      </div>
+      <div id="diagPreview" class="json-preview" hidden></div>
+    </section>
+
+    <section id="device" class="panel panel-gap">
       <h2>Device simulator · /ws/device</h2>
       <p class="hint" style="margin-top:0">
         Mimics an ESP32 node: uses the same WS host as the app channel. Auth via query
@@ -118,7 +143,7 @@
       </div>
     </section>
 
-    <section class="panel" style="margin-top:1.25rem">
+    <section id="app-ws" class="panel panel-gap">
       <h2>WebSocket · /ws/app</h2>
       <p class="hint" style="margin-top:0">Browsers cannot set <code>Authorization</code> on WebSockets reliably — auth is passed as query params (token is masked in the log).</p>
       <label for="wshost">WS host (no query string)</label>
@@ -136,19 +161,28 @@
         <button type="button" id="ping">Ping</button>
         <button type="button" class="danger" id="disconnect">Disconnect</button>
       </div>
-      <h2 style="margin-top:1.25rem">Log</h2>
+    </section>
+
+    <section id="log" class="panel panel-gap">
+      <h2>Log</h2>
+      <p class="hint" style="margin-top:0">Timestamped session transcript. Export for bug reports.</p>
       <div class="log-tools">
-        <button type="button" id="clearLog">Clear log</button>
-        <button type="button" id="copyLog">Copy log</button>
-        <span class="hint" style="margin:0">Shortcut: <kbd style="font-family:var(--font-mono)">Ctrl/Cmd+Shift+L</kbd> clear</span>
+        <button type="button" id="clearLog">Clear</button>
+        <button type="button" id="copyLog">Copy</button>
+        <button type="button" id="btnDownloadLog">Download .txt</button>
+        <span class="hint" style="margin:0"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>L</kbd> clear · <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>S</kbd> save log</span>
       </div>
-      <pre id="log"></pre>
+      <pre id="log" role="log" aria-live="polite" aria-relevant="additions"></pre>
     </section>
 
     <footer>
-      OpenAPI docs: <a id="linkDocs" href="/docs">/docs</a> ·
-      App channel <code>/ws/app</code> (presence, <code>get_session</code>, ping) ·
-      Device channel <code>/ws/device</code> (hello, heartbeat, ack, event).
+      <p class="footer-lead">
+        <a id="linkDocs" href="/docs">OpenAPI /docs</a>
+        · App <code>/ws/app</code>
+        · Device <code>/ws/device</code>
+        · <a href="https://github.com/jrb00013/tv-stretch" rel="noopener noreferrer">repo</a>
+      </p>
+      <p class="footer-fine">Coordinator API <span id="footerApiHint">ping to load version</span></p>
     </footer>
   </div>
 
