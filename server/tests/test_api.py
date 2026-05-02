@@ -18,22 +18,24 @@ def test_ready(client: TestClient) -> None:
 def test_handoff_flow(client: TestClient) -> None:
     h = client.post("/homes", json={"name": "h1"})
     assert h.status_code == 200
-    home_id = h.json()["id"]
-    assert h.json().get("control_token")
+    token = h.json().get("control_token")
+    assert token
+    headers = {"X-Control-Token": token}
 
-    r1 = client.post("/rooms", json={"home_id": home_id, "name": "living"})
-    r2 = client.post("/rooms", json={"home_id": home_id, "name": "kitchen"})
+    r1 = client.post("/rooms", json={"name": "living"}, headers=headers)
+    r2 = client.post("/rooms", json={"name": "kitchen"}, headers=headers)
     assert r1.status_code == 200 and r2.status_code == 200
     room_l = r1.json()["id"]
     room_k = r2.json()["id"]
 
-    reg = client.post("/nodes/register", json={"home_id": home_id, "room_id": room_l, "name": "n1"})
+    reg = client.post("/nodes/register", json={"room_id": room_l, "name": "n1"}, headers=headers)
     assert reg.status_code == 200
     assert reg.json()["api_key"]
 
     ho = client.post(
         "/sessions/handoff",
-        json={"home_id": home_id, "active_room_id": room_k, "content_ref": "demo"},
+        json={"active_room_id": room_k, "content_ref": "demo"},
+        headers=headers,
     )
     assert ho.status_code == 200
     body = ho.json()
@@ -41,11 +43,11 @@ def test_handoff_flow(client: TestClient) -> None:
     assert body.get("batch_id")
     assert any(c.get("cmd") == "cec_broadcast_ping" for c in body["commands"])
 
-    st = client.get(f"/sessions/{home_id}")
+    st = client.get("/sessions", headers=headers)
     assert st.status_code == 200
-    assert st.json()["active_room_id"] == room_k
+    assert st.json()["active_room_id"] == str(room_k)
 
-    ev = client.get(f"/sessions/{home_id}/events")
+    ev = client.get("/sessions/events", headers=headers)
     assert ev.status_code == 200
     assert isinstance(ev.json(), list)
 
