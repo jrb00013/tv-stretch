@@ -6,11 +6,12 @@ class Settings(BaseSettings):
 
     database_url: str = "sqlite:///./tv_stretch.db"
     api_title: str = "tv-stretch coordinator"
-    api_version: str = "0.3.0"
+    api_version: str = "0.4.0"
     cors_origins: str = "*"
     public_base_url: str = "http://127.0.0.1:8000"
     ota_firmware_path: str = ""
-    ota_firmware_version: str = "0.3.0"
+    ota_firmware_version: str = "0.4.0"
+    debug: bool = False
 
 
 settings = Settings()
