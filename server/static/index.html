@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>tv-stretch control</title>
+  <style>
+    :root { color-scheme: dark light; font-family: system-ui, sans-serif; }
+    body { max-width: 640px; margin: 2rem auto; padding: 0 1rem; }
+    label { display: block; margin: 0.75rem 0 0.25rem; }
+    input { width: 100%; padding: 0.5rem; box-sizing: border-box; }
+    button { margin-top: 1rem; padding: 0.6rem 1rem; margin-right: 0.5rem; }
+    pre { background: #1112; padding: 1rem; overflow: auto; border-radius: 6px; }
+    .row { display: grid; gap: 0.5rem; }
+    code { font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+  <h1>tv-stretch</h1>
+  <p>Browser UI for <code>/ws/app</code>. Query params carry auth because browser WebSockets cannot set <code>Authorization</code> headers.</p>
+
+  <div class="row">
+    <label>HTTP origin (shown in tips / copy)</label>
+    <input id="origin" value="http://127.0.0.1:8000" />
+
+    <label>WS host (no query string)</label>
+    <input id="wshost" value="127.0.0.1:8000" />
+
+    <label>Home UUID</label>
+    <input id="home" placeholder="home uuid" />
+
+    <label>Control token</label>
+    <input id="token" type="password" autocomplete="off" />
+
+    <label>Active room UUID</label>
+    <input id="room" placeholder="room uuid" />
+
+    <label>content_ref (optional)</label>
+    <input id="cref" placeholder="opaque string" />
+
+    <div>
+      <button id="connect" type="button">Connect</button>
+      <button id="send" type="button">Send presence</button>
+      <button id="ping" type="button">Ping</button>
+    </div>
+  </div>
+
+  <h2>Log</h2>
+  <pre id="log"></pre>
+
+  <script>
+    const logEl = document.getElementById("log");
+    function log(...a) { logEl.textContent += a.join(" ") + "\n"; }
+
+    let sock = null;
+
+    function buildWsUrl() {
+      const host = document.getElementById("wshost").value.trim().replace(/^\/+/, "");
+      const home = document.getElementById("home").value.trim();
+      const token = document.getElementById("token").value.trim();
+      const proto = host.startsWith("localhost") || host.startsWith("127.") ? "ws" : "wss";
+      const u = new URL(proto + "://" + host.replace(/^https?:\/\//i, ""));
+      u.pathname = "/ws/app";
+      u.searchParams.set("home_id", home);
+      u.searchParams.set("token", token);
+      return u.toString();
+    }
+
+    document.getElementById("connect").onclick = () => {
+      const url = buildWsUrl();
+      if (sock) { try { sock.close(); } catch (e) {} }
+      log("Connecting", url.replace(/token=[^&]+/, "token=***"));
+      sock = new WebSocket(url);
+      sock.onopen = () => log("ws open");
+      sock.onclose = () => log("ws closed");
+      sock.onerror = () => log("ws error");
+      sock.onmessage = (ev) => log("<<", ev.data);
+    };
+
+    document.getElementById("send").onclick = () => {
+      const room = document.getElementById("room").value.trim();
+      const cref = document.getElementById("cref").value.trim();
+      const origin = document.getElementById("origin").value.trim();
+      if (!sock || sock.readyState !== WebSocket.OPEN) {
+        document.getElementById("connect").click();
+      }
+      setTimeout(() => {
+        const msg = { v: 1, type: "presence", active_room_id: room };
+        if (cref) msg.content_ref = cref;
+        sock.send(JSON.stringify(msg));
+        log(">>", JSON.stringify(msg));
+        log("Set TV_STRETCH_PUBLIC_BASE_URL=" + origin + " on the server for LAN OTA URLs.");
+      }, 300);
+    };
+
+    document.getElementById("ping").onclick = () => {
+      if (!sock || sock.readyState !== WebSocket.OPEN) {
+        document.getElementById("connect").click();
+      }
+      setTimeout(() => {
+        sock.send(JSON.stringify({ v: 1, type: "ping" }));
+        log(">> ping");
+      }, 200);
+    };
+  </script>
+</body>
+</html>
