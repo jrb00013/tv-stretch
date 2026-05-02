@@ -9,7 +9,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from sqlmodel import Session, select
 
 import app.db as db_module
-from app.models import EventLog, Node
+from app.models import EventLog, Node, utcnow
 
 router = APIRouter()
 
@@ -71,8 +71,10 @@ def _parse_bearer(auth_header: str | None) -> str | None:
 
 @router.websocket("/ws/device")
 async def ws_device(websocket: WebSocket) -> None:
-    token = _parse_bearer(websocket.headers.get("authorization"))
-    home_hdr = websocket.headers.get("x-tv-stretch-home")
+    token = _parse_bearer(websocket.headers.get("authorization")) or (
+        websocket.query_params.get("token") or websocket.query_params.get("api_key")
+    )
+    home_hdr = websocket.headers.get("x-tv-stretch-home") or websocket.query_params.get("home_id")
     if not token or not home_hdr:
         await websocket.close(code=4401)
         return
@@ -102,8 +104,6 @@ async def ws_device(websocket: WebSocket) -> None:
                 with Session(db_module.engine) as s:
                     n = s.get(Node, node_id)
                     if n:
-                        from app.models import utcnow
-
                         n.last_seen_at = utcnow()
                         fv = (
                             msg.get("node", {}).get("fw")
@@ -114,6 +114,30 @@ async def ws_device(websocket: WebSocket) -> None:
                             n.firmware_version = fv
                         s.add(n)
                         s.commit()
+            elif mtype == "heartbeat":
+                with Session(db_module.engine) as s:
+                    n = s.get(Node, node_id)
+                    if n:
+                        n.last_seen_at = utcnow()
+                        s.add(n)
+                        s.commit()
+            elif mtype == "event":
+                payload_raw = msg.get("payload")
+                if isinstance(payload_raw, dict | list):
+                    pl = json.dumps(payload_raw)
+                elif isinstance(payload_raw, str):
+                    pl = json.dumps({"text": payload_raw})
+                else:
+                    pl = json.dumps(msg)
+                with Session(db_module.engine) as s:
+                    s.add(
+                        EventLog(
+                            home_id=home_id,
+                            kind="device_event",
+                            payload_json=pl,
+                        )
+                    )
+                    s.commit()
             elif mtype == "ack":
                 with Session(db_module.engine) as s:
                     s.add(

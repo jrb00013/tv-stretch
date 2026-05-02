@@ -51,6 +51,7 @@ def apply_handoff(
     *,
     content_ref: str | None = None,
     source: str = "api",
+    standby_others: bool = True,
 ) -> tuple[str, list[dict[str, Any]]]:
     batch_id = str(uuid.uuid4())
     st = session.get(SessionState, home_id)
@@ -96,7 +97,7 @@ def apply_handoff(
         batch_id=batch_id,
         _home_id=home_id,
         active_room_id=active_room_id,
-        standby_others=True,
+        standby_others=standby_others,
     )
     return batch_id, cmds
 

@@ -20,6 +20,7 @@ router = APIRouter(prefix="/sessions", tags=["sessions"])
 class HandoffBody(BaseModel):
     active_room_id: uuid.UUID
     content_ref: str | None = None
+    standby_others: bool = True
 
 
 class HandoffResult(BaseModel):
@@ -66,6 +67,7 @@ async def handoff(
         body.active_room_id,
         content_ref=body.content_ref,
         source="api",
+        standby_others=body.standby_others,
     )
     await push_command_batch(auth.home.id, cmds, batch_id=batch_id)
     return HandoffResult(ok=True, batch_id=batch_id, commands=cmds)
