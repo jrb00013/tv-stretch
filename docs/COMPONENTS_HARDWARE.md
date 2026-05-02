@@ -1,5 +1,7 @@
 # Hardware components (detailed)
 
+This file describes **tv-stretch-node** (ESP32-C3 HDMI CEC dongle). For **optical SLAM / presence companion** hardware (ToF, RGB-D, SBC), see [HARDWARE_OPTICAL_SLAM_STACK.md](HARDWARE_OPTICAL_SLAM_STACK.md) and the optional BOM section in [BOM.md](BOM.md).
+
 ## U1 — ESP32-C3-MINI-1
 
 - **Role:** Main MCU, Wi‑Fi (2.4 GHz), TLS-capable client, GPIO bit-bang CEC.

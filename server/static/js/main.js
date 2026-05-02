@@ -30,6 +30,9 @@ $("btnEvents").onclick = () => Rest.fetchEvents(ctx);
 $("btnHealth").onclick = () => Rest.fetchHealth(ctx);
 $("btnDiagOverview").onclick = () => Rest.fetchDiagnosticsOverview(ctx);
 $("btnDiagLive").onclick = () => Rest.fetchDiagnosticsLive(ctx);
+$("btnSpatialList").onclick = () => Rest.fetchSpatialMaps(ctx);
+$("btnSpatialPost").onclick = () => Rest.postSpatialMap(ctx);
+$("btnOccPost").onclick = () => Rest.postOccupancy(ctx);
 $("btnRegisterNode").onclick = () => Rest.registerNodeForRoom(ctx);
 
 $("connect").onclick = () => WsApp.connectApp(ctx);

@@ -15,8 +15,10 @@ from app.api import (
     homes,
     nodes,
     ota_bundle,
+    presence,
     rooms,
     sessions,
+    spatial,
 )
 from app.config import settings
 from app.db import init_db
@@ -39,7 +41,8 @@ app = FastAPI(
     docs_url="/docs" if settings.debug else None,
     description=(
         "Coordinator API for tv-stretch: SQLite-backed homes/rooms/nodes, REST handoffs, "
-        "app WebSocket presence (`/ws/app`), and device command batches (`/ws/device`)."
+        "spatial map blobs (`/spatial`), optical occupancy hooks (`/presence/occupancy`), "
+        "app WebSocket presence (`/ws/app`), and HDMI node batches (`/ws/device`)."
     ),
 )
 
@@ -61,6 +64,8 @@ app.include_router(homes.router)
 app.include_router(rooms.router)
 app.include_router(nodes.router)
 app.include_router(sessions.router)
+app.include_router(spatial.router)
+app.include_router(presence.router)
 app.include_router(bootstrap.router)
 app.include_router(diagnostics.router)
 app.include_router(ota_bundle.router)

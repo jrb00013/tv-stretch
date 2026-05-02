@@ -2,12 +2,21 @@ from __future__ import annotations
 
 import pytest
 from fastapi.testclient import TestClient
+
+from app.security.rate_limit import limiter as rate_limiter
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine
 
 import app.db as db_module
 from app.db import get_session
 from app.main import app
+
+
+@pytest.fixture(autouse=True)
+def reset_rate_limits() -> None:
+    """Clear in-memory rate limiter state between tests (shared TestClient host)."""
+    rate_limiter.reset()
+    yield
 
 
 @pytest.fixture(name="client")

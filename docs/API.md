@@ -8,7 +8,7 @@ Base URL: `http://localhost:8000` (or your host). OpenAPI UI: `/docs`. Root `/` 
   For **browser testing** (no custom headers), the same credentials may be passed as query parameters:  
   `ws://host/ws/device?home_id=<uuid>&token=<api_key>` (or `api_key=` instead of `token=`).
 
-- **Apps** (phone / automation): `X-Control-Token: <home.control_token>` on REST routes under `/homes`, `/rooms`, `/nodes`, `/sessions`, etc.
+- **Apps** (phone / automation): `X-Control-Token: <home.control_token>` on REST routes under `/homes`, `/rooms`, `/nodes`, `/sessions`, `/spatial`, `/presence`, etc.
 
 - **App WebSocket** `/ws/app`: `Authorization: Bearer <control_token>` + `X-TV-Stretch-Home: <home_uuid>`, **or** query params `?home_id=<uuid>&token=<control_token>` (required for browsers).
 
@@ -121,4 +121,35 @@ Set `TV_STRETCH_PUBLIC_BASE_URL` so manifest URLs are reachable from the device 
 
 ## Events
 
-- `GET /sessions/events?limit=50` — recent `EventLog` rows (handoffs, device acks, device events). Requires `X-Control-Token`.
+- `GET /sessions/events?limit=50` — recent `EventLog` rows (handoffs, device acks, device events, `occupancy_below_threshold`). Requires `X-Control-Token`.
+
+## Spatial maps (SLAM / floor-plan JSON)
+
+Authenticates with `X-Control-Token` (same as other home APIs).
+
+- `POST /spatial/maps` — body: `{ "label": "floor1", "schema_version": "slam.v1", "payload": { ... } }`. Upserts by **label** per home.
+- `GET /spatial/maps` — list map summaries (no large payload).
+- `GET /spatial/maps/{map_id}` — full map including `payload`.
+- `DELETE /spatial/maps/{map_id}`
+
+## Presence / occupancy (optical SLAM → TV handoff)
+
+- `POST /presence/occupancy` — body:
+
+```json
+{
+  "room_id": "<ROOM_UUID>",
+  "confidence": 0.85,
+  "source": "optical_slam",
+  "map_id": null,
+  "pose": { "x": 0, "y": 0, "yaw": 0 },
+  "content_ref": null,
+  "standby_others": true
+}
+```
+
+If `confidence` is **below** `TV_STRETCH_PRESENCE_HANDOFF_MIN_CONFIDENCE` (default `0.65`, overridable via env), the server **does not** hand off; response includes `"handoff": false, "reason": "below_threshold"`.
+
+If the user is **already** in the active room, returns `"handoff": false, "reason": "already_active"`.
+
+Otherwise runs the same coordinator path as `POST /sessions/handoff` and pushes `command_batch` to nodes.

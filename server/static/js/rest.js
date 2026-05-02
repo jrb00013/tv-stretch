@@ -313,3 +313,108 @@ export async function fetchDiagnosticsLive(ctx) {
   }
 }
 
+/** @param {ReturnType<import('./context.js').bootUi>} ctx */
+export async function fetchSpatialMaps(ctx) {
+  const { $, log, apiBase, authHeaders } = ctx;
+  const base = apiBase();
+  if (!base) return log("Set API base URL");
+  const box = /** @type {HTMLElement} */ ($("integrationPreview"));
+  try {
+    const r = await fetch(base + "/spatial/maps", { headers: authHeaders(false) });
+    const j = await r.json().catch(() => ({}));
+    if (r.ok) {
+      box.textContent = JSON.stringify(j, null, 2);
+      box.hidden = false;
+      log("GET /spatial/maps →", Array.isArray(j) ? j.length + " map(s)" : "ok");
+    } else {
+      log("GET /spatial/maps failed", r.status, JSON.stringify(j));
+    }
+  } catch (e) {
+    log("spatial list error:", String(e));
+  }
+}
+
+/** @param {ReturnType<import('./context.js').bootUi>} ctx */
+export async function postSpatialMap(ctx) {
+  const { $, log, apiBase, authHeaders } = ctx;
+  const base = apiBase();
+  if (!base) return log("Set API base URL");
+  const label = /** @type {HTMLInputElement} */ ($("spatialLabel")).value.trim() || "default";
+  const raw = /** @type {HTMLTextAreaElement} */ ($("spatialPayload")).value.trim();
+  let payload = {};
+  if (raw) {
+    try {
+      payload = JSON.parse(raw);
+      if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
+        log("Map payload must be a JSON object");
+        return;
+      }
+    } catch {
+      log("Invalid JSON in map payload");
+      return;
+    }
+  }
+  const box = /** @type {HTMLElement} */ ($("integrationPreview"));
+  try {
+    const r = await fetch(base + "/spatial/maps", {
+      method: "POST",
+      headers: authHeaders(true),
+      body: JSON.stringify({ label, schema_version: "slam.v1", payload }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (r.ok) {
+      box.textContent = JSON.stringify(j, null, 2);
+      box.hidden = false;
+      log("POST /spatial/maps → label", j.label || label);
+    } else {
+      log("POST /spatial/maps failed", r.status, JSON.stringify(j));
+    }
+  } catch (e) {
+    log("spatial post error:", String(e));
+  }
+}
+
+/** @param {ReturnType<import('./context.js').bootUi>} ctx */
+export async function postOccupancy(ctx) {
+  const { $, log, apiBase, authHeaders } = ctx;
+  const base = apiBase();
+  const room = /** @type {HTMLSelectElement} */ ($("roomSelect")).value;
+  if (!base || !room) {
+    log("Select a room (GET /rooms) first");
+    return;
+  }
+  const confVal = parseFloat(/** @type {HTMLInputElement} */ ($("occConfidence")).value);
+  const confidence = Number.isFinite(confVal) ? confVal : 0;
+  const source = /** @type {HTMLInputElement} */ ($("occSource")).value.trim() || "optical_lab";
+  const standbyOthers = /** @type {HTMLInputElement} */ ($("occStandby")).checked;
+  const cref = /** @type {HTMLInputElement} */ ($("cref")).value.trim();
+  const body = {
+    room_id: room,
+    confidence,
+    source,
+    standby_others: standbyOthers,
+  };
+  if (cref) body.content_ref = cref;
+  const box = /** @type {HTMLElement} */ ($("integrationPreview"));
+  try {
+    const r = await fetch(base + "/presence/occupancy", {
+      method: "POST",
+      headers: authHeaders(true),
+      body: JSON.stringify(body),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (r.ok) {
+      box.textContent = JSON.stringify(j, null, 2);
+      box.hidden = false;
+      log(
+        "POST /presence/occupancy →",
+        j.handoff ? "handoff batch " + (j.batch_id || "?") : j.reason || "no handoff"
+      );
+    } else {
+      log("POST /presence/occupancy failed", r.status, JSON.stringify(j));
+    }
+  } catch (e) {
+    log("occupancy error:", String(e));
+  }
+}
+

@@ -41,6 +41,17 @@ class SessionState(SQLModel, table=True):
     updated_at: datetime = Field(default_factory=utcnow)
 
 
+class SpatialMap(SQLModel, table=True):
+    """Floor-plan / SLAM export JSON per home (`schema_version` labels interchange format)."""
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    home_id: uuid.UUID = Field(foreign_key="home.id", index=True)
+    label: str = Field(default="default", index=True)
+    schema_version: str = Field(default="slam.v1", index=True)
+    payload_json: str = Field(sa_column=Column(Text, nullable=False))
+    updated_at: datetime = Field(default_factory=utcnow)
+
+
 class EventLog(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     home_id: uuid.UUID = Field(foreign_key="home.id", index=True)

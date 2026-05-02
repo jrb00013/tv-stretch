@@ -20,7 +20,7 @@
           <h1>tv-stretch</h1>
           <span id="apiVersion" class="version-chip" hidden></span>
         </div>
-        <p class="tagline">Room-aware TV coordination — REST handoffs, session state, WebSocket presence on <code>/ws/app</code>, device batches on <code>/ws/device</code>.</p>
+        <p class="tagline">Room-aware TV coordination — REST handoffs, optional spatial maps + optical occupancy (<code>/spatial/*</code>, <code>/presence/occupancy</code>), session state, WebSocket presence on <code>/ws/app</code>, device batches on <code>/ws/device</code>.</p>
       </div>
       <div class="badges" aria-label="Connection status">
         <span id="badge-api" class="badge">API …</span>
@@ -34,6 +34,7 @@
       <a href="#bootstrap">Bootstrap</a>
       <a href="#sessions">Sessions</a>
       <a href="#diag">Diagnostics</a>
+      <a href="#presence">Spatial</a>
       <a href="#device">Device</a>
       <a href="#app-ws">App WS</a>
       <a href="#log">Log</a>
@@ -120,6 +121,34 @@
         <button type="button" id="btnDiagLive">GET /diagnostics/homes/{id}/live</button>
       </div>
       <div id="diagPreview" class="json-preview" hidden></div>
+    </section>
+
+    <section id="presence" class="panel panel-gap">
+      <h2>Spatial maps & occupancy</h2>
+      <p class="hint" style="margin-top:0">
+        Feed SLAM / optical localization into the coordinator: store map JSON, then report <code>room_id</code> + confidence.
+        Handoff runs when confidence ≥ server threshold (<code>TV_STRETCH_PRESENCE_HANDOFF_MIN_CONFIDENCE</code>).
+      </p>
+      <label for="spatialLabel">Map label (upsert key)</label>
+      <input id="spatialLabel" value="floor1" autocomplete="off" />
+      <label for="spatialPayload">Map payload (JSON object)</label>
+      <textarea id="spatialPayload" rows="4" placeholder='{"rooms":[{"id":"living","polygon_m":[[0,0],[5,0],[5,4],[0,4]]}]}'></textarea>
+      <div class="btn-row">
+        <button type="button" id="btnSpatialList">GET /spatial/maps</button>
+        <button type="button" class="primary" id="btnSpatialPost">POST /spatial/maps</button>
+      </div>
+      <label for="occConfidence">Occupancy confidence (0–1)</label>
+      <input id="occConfidence" type="number" min="0" max="1" step="0.05" value="0.9" />
+      <label for="occSource">Source string</label>
+      <input id="occSource" value="optical_lab" autocomplete="off" />
+      <div class="checkbox-row">
+        <input type="checkbox" id="occStandby" checked />
+        <label for="occStandby" style="margin:0;font-weight:400;">standby_others on occupancy handoff</label>
+      </div>
+      <div class="btn-row">
+        <button type="button" class="primary" id="btnOccPost">POST /presence/occupancy</button>
+      </div>
+      <div id="integrationPreview" class="json-preview" hidden></div>
     </section>
 
     <section id="device" class="panel panel-gap">

@@ -22,3 +22,19 @@ Columns: Ref | Qty | Manufacturer | MPN | Description | Footprint | Supplier not
 **Alternates:** ESP32-C3-WROOM-02; LDO AP7363 or TLV75533; HDMI pigtail instead of on-board plug.
 
 **Mechanical:** screws, enclosure — see [MECHANICAL.md](MECHANICAL.md).
+
+---
+
+## Optional — optical SLAM / presence companion (not on CEC dongle PCB)
+
+These parts support **mapping + localization** that calls `POST /presence/occupancy` on the coordinator. Typical builds use a **separate SBC or dev kit** plus sensors; the ESP32-C3 node remains the HDMI adapter only.
+
+| Role | Example parts | Notes |
+|------|----------------|-------|
+| Depth / RGB-D | Intel RealSense–class USB module, stereo camera pairs | Often needs USB3 + adequate PSU |
+| ToF grids | VL53L5CX / VL53L8CX (I²C) | Room-scale occupancy hints without full SLAM |
+| IMU | BMI270, ICM-42688-P (SPI/I²C) | Fusion with vision / VO |
+| Edge ML MCU | ESP32-S3 with PSRAM | Lightweight fusion only—heavy SLAM usually on **Pi / Jetson / PC** |
+| SBC | Raspberry Pi 5, Jetson Orin Nano | ORB-SLAM3, RTAB-Map, OpenVINS-class stacks |
+
+See [HARDWARE_OPTICAL_SLAM_STACK.md](HARDWARE_OPTICAL_SLAM_STACK.md) for system wiring and [COMPONENTS_HARDWARE.md](COMPONENTS_HARDWARE.md) for the CEC node itself.

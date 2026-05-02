@@ -8,6 +8,8 @@ services:
     environment:
       - TV_STRETCH_DATABASE_URL=sqlite:////data/tv_stretch.db
       - TV_STRETCH_PUBLIC_BASE_URL=http://localhost:8000
+      # Minimum confidence (0–1) for POST /presence/occupancy to trigger display handoff
+      - TV_STRETCH_PRESENCE_HANDOFF_MIN_CONFIDENCE=0.65
     volumes:
       - tv_stretch_data:/data
     depends_on:

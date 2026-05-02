@@ -4,7 +4,7 @@
 
 - **Coordinator**: single source of truth for which **room** should have the “focused” TV.
 - **Nodes**: one device per TV, connected to the **HDMI CEC** line, receiving commands over **WiFi** (WebSocket to the server).
-- **Clients** (future): mobile or fixed sensors report `active_room_id` or user confirms handoff.
+- **Clients**: apps over **`/ws/app`**, REST handoffs, or **optical / SLAM pipelines** via **`POST /presence/occupancy`** (room + confidence).
 
 ## Honesty boundary
 
@@ -24,11 +24,13 @@ flowchart TB
     API --> DB
   end
   Phone[Mobile_or_sensor_client]
+  Slam[Optical_SLAM_or_presence_rig]
   N1[Node_room_A]
   N2[Node_room_B]
   TV1[TV_A]
   TV2[TV_B]
   Phone -->|REST_or_WS| API
+  Slam -->|POST_/presence/occupancy| API
   N1 <-->|WSS_device| API
   N2 <-->|WSS_device| API
   N1 <-->|HDMI_CEC| TV1
@@ -37,7 +39,7 @@ flowchart TB
 
 ## Message flow
 
-1. Client sets **active session** (`home_id`, `active_room_id`, optional `content_ref`).
+1. Client sets **active session** (`home_id`, `active_room_id`, optional `content_ref`) — via REST, **`/ws/app`**, or **`POST /presence/occupancy`** when localization confidence exceeds the configured threshold.
 2. **Coordinator** computes a **command batch**:
    - `focus` for the node in `active_room_id`.
    - Optional `standby_others` or `cec_user_control` for non-active nodes (policy flags).

@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from sqlmodel import Session, select
 
 from app.db import get_session
-from app.models import EventLog, Home, Node, Room, SessionState
+from app.models import EventLog, Home, Node, Room, SessionState, SpatialMap
 from app.security.auth import AuthenticatedHome, require_home_auth
 from app.security.rate_limit import limiter
 
@@ -113,6 +113,8 @@ def delete_home(
     h = session.get(Home, home_id)
     if h is None:
         raise HTTPException(status_code=404, detail="home not found")
+    for sm in session.exec(select(SpatialMap).where(SpatialMap.home_id == home_id)).all():
+        session.delete(sm)
     for ev in session.exec(select(EventLog).where(EventLog.home_id == home_id)).all():
         session.delete(ev)
     for n in session.exec(select(Node).where(Node.home_id == home_id)).all():
