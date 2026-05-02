@@ -1,0 +1,98 @@
+menu "TV Stretch Node Configuration"
+
+    config TVS_WIFI_SSID
+        string "WiFi SSID"
+        default "myssid"
+        help
+            WiFi network name. Can be overridden via NVS key wifi_ssid.
+
+    config TVS_WIFI_PASSWORD
+        string "WiFi password"
+        default "password"
+        help
+            WiFi password. Prefer provisioning; NVS key wifi_pass.
+
+    config TVS_SERVER_WS_URL
+        string "Coordinator WebSocket URL"
+        default "ws://192.168.1.10:8000/ws/device"
+        help
+            Full WebSocket URL including path /ws/device
+
+    config TVS_NODE_API_KEY
+        string "Node API key"
+        default "dev-node-key"
+        help
+            Bearer token for device authentication (override via NVS api_key).
+
+    config TVS_ROOM_ID
+        string "Room ID (UUID)"
+        default "00000000-0000-0000-0000-000000000001"
+        help
+            Logical room this node is mounted in.
+
+    config TVS_HOME_ID
+        string "Home ID (UUID)"
+        default "00000000-0000-0000-0000-000000000000"
+        help
+            Home / tenant identifier.
+
+    config TVS_CEC_GPIO
+        int "GPIO number for HDMI CEC"
+        default 4
+        help
+            ESP32-C3 GPIO wired to HDMI pin 13 (CEC).
+
+    config TVS_STATUS_LED_ENABLE
+        bool "Enable status LED"
+        default y
+        help
+            Blink GPIO on command batches.
+
+    config TVS_STATUS_LED_GPIO
+        int "Status LED GPIO"
+        depends on TVS_STATUS_LED_ENABLE
+        default 8
+        help
+            GPIO for activity LED (board dependent).
+
+    config TVS_FW_VERSION
+        string "Firmware version string"
+        default "0.3.0"
+        help
+            Reported in hello JSON and OTA manifest compare.
+
+    config TVS_HTTP_PROVISIONING
+        bool "First-boot SoftAP + HTTP provisioning UI"
+        default n
+        help
+            If y and NVS provisioned!=1, starts AP tv-stretch-setup. Join it and open http://192.168.4.1
+
+    config TVS_PROV_AP_SSID
+        string "Provisioning SoftAP SSID"
+        depends on TVS_HTTP_PROVISIONING
+        default "tv-stretch-setup"
+
+    config TVS_PROV_AP_PASS
+        string "Provisioning SoftAP password (min 8 chars)"
+        depends on TVS_HTTP_PROVISIONING
+        default "tvstretch1"
+
+    config TVS_PROV_AP_CHANNEL
+        int "Provisioning SoftAP channel"
+        depends on TVS_HTTP_PROVISIONING
+        default 1
+        range 1 13
+
+    config TVS_OTA_BOOT_MANIFEST_URL
+        string "Optional: manifest URL to fetch on boot (empty to disable)"
+        default ""
+        help
+            Example http://192.168.1.10:8000/ota/manifest
+
+    config TVS_OTA_AUTO_CHECK_ON_BOOT
+        bool "On boot: if manifest version != firmware version, run OTA"
+        default n
+        help
+            Dangerous on misconfigured servers; prefer ota_pull command from coordinator.
+
+endmenu

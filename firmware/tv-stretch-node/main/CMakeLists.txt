@@ -1,0 +1,29 @@
+idf_component_register(
+    SRCS
+        "app_main.c"
+        "cec/cec_bitbang.c"
+        "net/ws_client.c"
+        "net/tvs_wifi.c"
+        "prov/tvs_nvs.c"
+        "prov/prov_http.c"
+        "ota/tvs_ota.c"
+    INCLUDE_DIRS
+        "."
+        "cec"
+        "net"
+        "proto"
+        "prov"
+        "ota"
+    REQUIRES
+        nvs_flash
+        esp_wifi
+        esp_netif
+        esp_event
+        esp_websocket_client
+        esp_http_server
+        esp_http_client
+        esp_https_ota
+        app_update
+        json
+        driver
+)
