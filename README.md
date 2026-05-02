@@ -29,6 +29,8 @@ Open `http://localhost:8000/` (redirects to the control UI) or `http://localhost
 
 From the repo root, `./scripts/dev.sh` or `make dev` runs uvicorn with a local SQLite DB (after `pip install -e ".[dev]"` in `server/`).
 
+The browser UI under `server/static/` is split into `css/app.css` and ES modules in `server/static/js/` (entry `main.js`) instead of a single huge HTML file.
+
 **Breaking note (0.2+):** `Home` rows require `control_token`. Delete old `tv_stretch.db` or recreate homes after upgrading.
 
 ### Docker
