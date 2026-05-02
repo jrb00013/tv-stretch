@@ -1,0 +1,40 @@
+# Python
+.venv/
+.venv-cad/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+*.egg-info/
+dist/
+build/
+
+# ESP-IDF
+firmware/tv-stretch-node/build/
+firmware/tv-stretch-node/sdkconfig
+firmware/tv-stretch-node/sdkconfig.old
+firmware/tv-stretch-node/managed_components/
+
+# KiCad
+*.bak
+*-backups/
+*.kicad_prl
+fp-info-cache
+hardware/kicad/**/~*
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local data
+*.db
+.env
+.env.local
+
+# Generated (optional regen)
+# hardware/cad/enclosure/exports/enclosure.step
