@@ -4,7 +4,7 @@ import json
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.config import settings
 from app.models import EventLog, SessionState
@@ -17,6 +17,20 @@ router = APIRouter(prefix="/presence", tags=["presence"])
 
 
 class OccupancyIn(BaseModel):
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "room_id": "00000000-0000-4000-8000-000000000001",
+                "confidence": 0.88,
+                "source": "rgbd_slam",
+                "map_id": None,
+                "pose": {"x_m": 2.1, "y_m": 3.4, "yaw_rad": 0.02},
+                "content_ref": None,
+                "standby_others": True,
+            }
+        }
+    )
+
     room_id: uuid.UUID
     confidence: float = Field(ge=0.0, le=1.0)
     source: str = "optical_slam"

@@ -18,7 +18,10 @@ def test_health(client: TestClient) -> None:
 def test_ready(client: TestClient) -> None:
     r = client.get("/health/ready")
     assert r.status_code == 200
-    assert r.json()["status"] == "ready"
+    body = r.json()
+    assert body["status"] == "ready"
+    assert "presence_handoff_min_confidence" in body
+    assert isinstance(body["presence_handoff_min_confidence"], (int, float))
 
 
 def test_handoff_without_standby_omits_policy(client: TestClient) -> None:

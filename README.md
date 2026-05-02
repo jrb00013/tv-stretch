@@ -27,9 +27,11 @@ Open `http://localhost:8000/` (redirects to the control UI) or `http://localhost
 
 **Browser control UI** (`/ui/`): sticky section nav, API **version chip** (from `/health/ready`), **diagnostics** (`GET /diagnostics/overview` and per-home **live** sockets), **spatial maps** + **occupancy** lab (`/spatial/maps`, `POST /presence/occupancy`), dark-themed **bootstrap**, authenticated **REST**, **app** and **device** WebSocket labs, **log** export (download + **Ctrl+Shift+S**) and clear (**Ctrl+Shift+L**). Assets: `server/static/css/`, `server/static/js/`, `server/static/assets/favicon.svg`. Full protocol: [docs/API.md](docs/API.md). Provisioning + OTA: [docs/PROVISIONING_AND_OTA.md](docs/PROVISIONING_AND_OTA.md).
 
-Server package version is **0.6.0** (`pyproject.toml` / `TV_STRETCH_*` defaults). Optional env **`TV_STRETCH_PRESENCE_HANDOFF_MIN_CONFIDENCE`** (default `0.65`) gates occupancy-triggered TV handoffs.
+Server package version is **0.6.1** (`pyproject.toml` / `TV_STRETCH_*` defaults). Optional env **`TV_STRETCH_PRESENCE_HANDOFF_MIN_CONFIDENCE`** (default `0.65`) gates occupancy-triggered TV handoffs.
 
 From the repo root, `./scripts/dev.sh` or `make dev` runs uvicorn with a local SQLite DB (after `pip install -e ".[dev]"` in `server/`).
+
+Optional env vars: copy `server/.env.example` → `server/.env`. Example curls for spatial + occupancy: `scripts/spatial-presence-examples.sh` (set `TOKEN`, optionally `BASE`).
 
 **Breaking note (0.2+):** `Home` rows require `control_token`. Delete old `tv_stretch.db` or recreate homes after upgrading.
 

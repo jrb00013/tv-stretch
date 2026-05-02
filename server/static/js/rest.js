@@ -22,19 +22,41 @@ export async function pingApi(ctx) {
         chip.textContent = j.version ? "v" + j.version : "";
         chip.hidden = !j.version;
       }
+      const thr = $("presenceThresholdBadge");
+      if (
+        thr &&
+        typeof j.presence_handoff_min_confidence === "number"
+      ) {
+        thr.textContent =
+          "Occupancy handoff ≥ " + j.presence_handoff_min_confidence;
+        thr.hidden = false;
+      }
       const foot = $("footerApiHint");
-      if (foot && j.version) foot.textContent = "v" + j.version + " · SQLite coordinator";
+      if (foot && j.version) {
+        let line =
+          "v" +
+          j.version +
+          " · SQLite coordinator · occupancy ≥ " +
+          (typeof j.presence_handoff_min_confidence === "number"
+            ? j.presence_handoff_min_confidence
+            : "?");
+        foot.textContent = line;
+      }
       log("GET /health/ready →", j.status || j);
     } else {
       setBadge($, "badge-api", "API error " + r.status, false);
       const chip = $("apiVersion");
       if (chip) chip.hidden = true;
+      const thrErr = $("presenceThresholdBadge");
+      if (thrErr) thrErr.hidden = true;
       log("GET /health/ready failed", r.status);
     }
   } catch (e) {
     setBadge($, "badge-api", "API unreachable", false);
     const chip = $("apiVersion");
     if (chip) chip.hidden = true;
+    const thr = $("presenceThresholdBadge");
+    if (thr) thr.hidden = true;
     log("Ping failed:", String(e));
   }
 }
@@ -388,13 +410,39 @@ export async function postOccupancy(ctx) {
   const source = /** @type {HTMLInputElement} */ ($("occSource")).value.trim() || "optical_lab";
   const standbyOthers = /** @type {HTMLInputElement} */ ($("occStandby")).checked;
   const cref = /** @type {HTMLInputElement} */ ($("cref")).value.trim();
-  const body = {
+  const mapRaw = /** @type {HTMLInputElement} */ ($("occMapId")).value.trim();
+  const poseRaw = /** @type {HTMLTextAreaElement} */ ($("occPose")).value.trim();
+  const body = /** @type {Record<string, unknown>} */ ({
     room_id: room,
     confidence,
     source,
     standby_others: standbyOthers,
-  };
+  });
   if (cref) body.content_ref = cref;
+  if (mapRaw) {
+    if (
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        mapRaw
+      )
+    ) {
+      log("map_id must be a UUID or leave empty");
+      return;
+    }
+    body.map_id = mapRaw;
+  }
+  if (poseRaw) {
+    try {
+      const p = JSON.parse(poseRaw);
+      if (typeof p !== "object" || p === null || Array.isArray(p)) {
+        log("pose must be a JSON object");
+        return;
+      }
+      body.pose = p;
+    } catch {
+      log("Invalid JSON in pose");
+      return;
+    }
+  }
   const box = /** @type {HTMLElement} */ ($("integrationPreview"));
   try {
     const r = await fetch(base + "/presence/occupancy", {
@@ -415,6 +463,114 @@ export async function postOccupancy(ctx) {
     }
   } catch (e) {
     log("occupancy error:", String(e));
+  }
+}
+
+/** @param {ReturnType<import('./context.js').bootUi>} ctx */
+export async function fetchSpatialMapById(ctx) {
+  const { $, log, apiBase, authHeaders } = ctx;
+  const base = apiBase();
+  const mid = /** @type {HTMLInputElement} */ ($("spatialMapId")).value.trim();
+  if (!base) return log("Set API base URL");
+  if (!mid) {
+    log("Paste a map UUID (from GET /spatial/maps)");
+    return;
+  }
+  const box = /** @type {HTMLElement} */ ($("integrationPreview"));
+  try {
+    const r = await fetch(base + "/spatial/maps/" + encodeURIComponent(mid), {
+      headers: authHeaders(false),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (r.ok) {
+      box.textContent = JSON.stringify(j, null, 2);
+      box.hidden = false;
+      log("GET /spatial/maps/{id} →", j.label || "ok");
+    } else {
+      log("GET map failed", r.status, JSON.stringify(j));
+    }
+  } catch (e) {
+    log("spatial get error:", String(e));
+  }
+}
+
+/** @param {ReturnType<import('./context.js').bootUi>} ctx */
+export async function deleteSpatialMap(ctx) {
+  const { $, log, apiBase, authHeaders } = ctx;
+  const base = apiBase();
+  const mid = /** @type {HTMLInputElement} */ ($("spatialMapId")).value.trim();
+  if (!base) return log("Set API base URL");
+  if (!mid) {
+    log("Paste a map UUID to delete");
+    return;
+  }
+  const box = /** @type {HTMLElement} */ ($("integrationPreview"));
+  try {
+    const r = await fetch(base + "/spatial/maps/" + encodeURIComponent(mid), {
+      method: "DELETE",
+      headers: authHeaders(false),
+    });
+    if (r.status === 204) {
+      box.textContent = JSON.stringify({ deleted: mid, status: 204 }, null, 2);
+      box.hidden = false;
+      log("DELETE /spatial/maps/{id} → 204");
+    } else {
+      const j = await r.json().catch(() => ({}));
+      log("DELETE map failed", r.status, JSON.stringify(j));
+    }
+  } catch (e) {
+    log("spatial delete error:", String(e));
+  }
+}
+
+/** @param {ReturnType<import('./context.js').bootUi>} ctx */
+export async function copyOccupancyCurl(ctx) {
+  const { $, log, apiBase } = ctx;
+  const base = apiBase();
+  const tok = /** @type {HTMLInputElement} */ ($("token")).value.trim();
+  const room = /** @type {HTMLSelectElement} */ ($("roomSelect")).value;
+  if (!base || !tok || !room) {
+    log("Need API URL, token, and selected room");
+    return;
+  }
+  const confVal = parseFloat(/** @type {HTMLInputElement} */ ($("occConfidence")).value);
+  const confidence = Number.isFinite(confVal) ? confVal : 0;
+  const source = /** @type {HTMLInputElement} */ ($("occSource")).value.trim() || "optical_lab";
+  const standbyOthers = /** @type {HTMLInputElement} */ ($("occStandby")).checked;
+  const cref = /** @type {HTMLInputElement} */ ($("cref")).value.trim();
+  const mapRaw = /** @type {HTMLInputElement} */ ($("occMapId")).value.trim();
+  const poseRaw = /** @type {HTMLTextAreaElement} */ ($("occPose")).value.trim();
+  const payload = /** @type {Record<string, unknown>} */ ({
+    room_id: room,
+    confidence,
+    source,
+    standby_others: standbyOthers,
+  });
+  if (cref) payload.content_ref = cref;
+  if (mapRaw) payload.map_id = mapRaw;
+  if (poseRaw) {
+    try {
+      payload.pose = JSON.parse(poseRaw);
+    } catch {
+      log("Fix pose JSON before copying curl");
+      return;
+    }
+  }
+  const esc = JSON.stringify(payload);
+  const line =
+    "curl -sS -X POST " +
+    JSON.stringify(base + "/presence/occupancy") +
+    " \\\n  -H " +
+    JSON.stringify("Content-Type: application/json") +
+    " \\\n  -H " +
+    JSON.stringify("X-Control-Token: " + tok) +
+    " \\\n  -d " +
+    JSON.stringify(esc);
+  try {
+    await navigator.clipboard.writeText(line);
+    log("(copied occupancy curl to clipboard)");
+  } catch (e) {
+    log("clipboard failed — curl printed below\n", line);
   }
 }
 

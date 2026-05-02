@@ -32,7 +32,10 @@ $("btnDiagOverview").onclick = () => Rest.fetchDiagnosticsOverview(ctx);
 $("btnDiagLive").onclick = () => Rest.fetchDiagnosticsLive(ctx);
 $("btnSpatialList").onclick = () => Rest.fetchSpatialMaps(ctx);
 $("btnSpatialPost").onclick = () => Rest.postSpatialMap(ctx);
+$("btnSpatialGet").onclick = () => Rest.fetchSpatialMapById(ctx);
+$("btnSpatialDelete").onclick = () => Rest.deleteSpatialMap(ctx);
 $("btnOccPost").onclick = () => Rest.postOccupancy(ctx);
+$("btnCopyOccCurl").onclick = () => Rest.copyOccupancyCurl(ctx);
 $("btnRegisterNode").onclick = () => Rest.registerNodeForRoom(ctx);
 
 $("connect").onclick = () => WsApp.connectApp(ctx);

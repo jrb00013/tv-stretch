@@ -123,31 +123,72 @@
       <div id="diagPreview" class="json-preview" hidden></div>
     </section>
 
-    <section id="presence" class="panel panel-gap">
-      <h2>Spatial maps & occupancy</h2>
+    <section id="presence" class="panel panel-gap panel-spatial">
+      <div class="panel-spatial-head">
+        <h2>Spatial maps & occupancy</h2>
+        <span id="presenceThresholdBadge" class="threshold-badge" hidden></span>
+      </div>
       <p class="hint" style="margin-top:0">
-        Feed SLAM / optical localization into the coordinator: store map JSON, then report <code>room_id</code> + confidence.
-        Handoff runs when confidence ≥ server threshold (<code>TV_STRETCH_PRESENCE_HANDOFF_MIN_CONFIDENCE</code>).
+        Store SLAM / floor-plan JSON per home, then drive TVs with <code>room_id</code> + confidence. Handoff matches
+        <code>POST /sessions/handoff</code> when confidence ≥ <code>presence_handoff_min_confidence</code> from
+        <code>GET /health/ready</code> (override with <code>TV_STRETCH_PRESENCE_HANDOFF_MIN_CONFIDENCE</code>).
       </p>
-      <label for="spatialLabel">Map label (upsert key)</label>
-      <input id="spatialLabel" value="floor1" autocomplete="off" />
-      <label for="spatialPayload">Map payload (JSON object)</label>
-      <textarea id="spatialPayload" rows="4" placeholder='{"rooms":[{"id":"living","polygon_m":[[0,0],[5,0],[5,4],[0,4]]}]}'></textarea>
-      <div class="btn-row">
-        <button type="button" id="btnSpatialList">GET /spatial/maps</button>
-        <button type="button" class="primary" id="btnSpatialPost">POST /spatial/maps</button>
+
+      <div class="sub-grid">
+        <div class="sub-panel">
+          <h3 class="sub-heading">Maps</h3>
+          <label for="spatialLabel">Label (upsert key)</label>
+          <input id="spatialLabel" value="floor1" autocomplete="off" />
+          <label for="spatialPayload">Payload (JSON object)</label>
+          <textarea id="spatialPayload" rows="5" spellcheck="false" placeholder='{"rooms":[{"id":"living","polygon_m":[[0,0],[5,0],[5,4],[0,4]]}]}'></textarea>
+          <div class="btn-row">
+            <button type="button" id="btnSpatialList">GET /spatial/maps</button>
+            <button type="button" class="primary" id="btnSpatialPost">POST /spatial/maps</button>
+          </div>
+          <label for="spatialMapId">Map UUID (from list)</label>
+          <input id="spatialMapId" placeholder="paste map id for GET / DELETE" autocomplete="off" />
+          <div class="btn-row">
+            <button type="button" id="btnSpatialGet">GET /spatial/maps/{id}</button>
+            <button type="button" class="danger" id="btnSpatialDelete">DELETE /spatial/maps/{id}</button>
+          </div>
+        </div>
+
+        <div class="sub-panel">
+          <h3 class="sub-heading">Occupancy → TVs</h3>
+          <p class="hint" style="margin-top:0">Uses <strong>Active room</strong> from the Sessions panel above.</p>
+          <label for="occConfidence">Confidence (0–1)</label>
+          <input id="occConfidence" type="number" min="0" max="1" step="0.05" value="0.9" />
+          <label for="occSource">Source tag</label>
+          <input id="occSource" value="optical_lab" autocomplete="off" />
+          <label for="occMapId">map_id (optional UUID)</label>
+          <input id="occMapId" placeholder="omit if not tracking map revision" autocomplete="off" />
+          <label for="occPose">pose JSON (optional)</label>
+          <textarea id="occPose" rows="2" spellcheck="false" placeholder='{"x_m":1.2,"y_m":2.3,"yaw_rad":0}'></textarea>
+          <div class="checkbox-row">
+            <input type="checkbox" id="occStandby" checked />
+            <label for="occStandby" style="margin:0;font-weight:400;">standby_others</label>
+          </div>
+          <div class="btn-row">
+            <button type="button" class="primary" id="btnOccPost">POST /presence/occupancy</button>
+            <button type="button" id="btnCopyOccCurl">Copy occupancy curl</button>
+          </div>
+        </div>
       </div>
-      <label for="occConfidence">Occupancy confidence (0–1)</label>
-      <input id="occConfidence" type="number" min="0" max="1" step="0.05" value="0.9" />
-      <label for="occSource">Source string</label>
-      <input id="occSource" value="optical_lab" autocomplete="off" />
-      <div class="checkbox-row">
-        <input type="checkbox" id="occStandby" checked />
-        <label for="occStandby" style="margin:0;font-weight:400;">standby_others on occupancy handoff</label>
-      </div>
-      <div class="btn-row">
-        <button type="button" class="primary" id="btnOccPost">POST /presence/occupancy</button>
-      </div>
+
+      <details class="curl-recipes">
+        <summary>CLI recipes</summary>
+        <pre class="recipe-pre" id="curlRecipeStatic"># Replace BASE and TOKEN (same as UI). Room UUID from GET /rooms.
+
+curl -sS "$BASE/health/ready"
+curl -sS -H "X-Control-Token: $TOKEN" "$BASE/spatial/maps"
+curl -sS -X POST -H "Content-Type: application/json" -H "X-Control-Token: $TOKEN" \
+  -d '{"label":"floor1","schema_version":"slam.v1","payload":{"rooms":[]}}' \
+  "$BASE/spatial/maps"
+curl -sS -X POST -H "Content-Type: application/json" -H "X-Control-Token: $TOKEN" \
+  -d '{"room_id":"ROOM_UUID","confidence":0.9,"source":"cli","standby_others":true}' \
+  "$BASE/presence/occupancy"</pre>
+      </details>
+
       <div id="integrationPreview" class="json-preview" hidden></div>
     </section>
 

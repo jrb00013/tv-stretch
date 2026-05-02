@@ -2,14 +2,13 @@ from __future__ import annotations
 
 import pytest
 from fastapi.testclient import TestClient
-
-from app.security.rate_limit import limiter as rate_limiter
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine
 
 import app.db as db_module
 from app.db import get_session
 from app.main import app
+from app.security.rate_limit import limiter as rate_limiter
 
 
 @pytest.fixture(autouse=True)

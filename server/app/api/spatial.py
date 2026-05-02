@@ -4,7 +4,7 @@ import json
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlmodel import select
 
 from app.models import SpatialMap, utcnow
@@ -14,6 +14,24 @@ router = APIRouter(prefix="/spatial", tags=["spatial"])
 
 
 class SpatialMapPayload(BaseModel):
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "label": "floor1",
+                "schema_version": "slam.v1",
+                "payload": {
+                    "origin": "slam_export",
+                    "rooms": [
+                        {
+                            "id": "living",
+                            "polygon_m": [[0, 0], [5.2, 0], [5.2, 4.1], [0, 4.1]],
+                        }
+                    ],
+                },
+            }
+        }
+    )
+
     label: str = "default"
     schema_version: str = "slam.v1"
     payload: dict

@@ -110,7 +110,7 @@ Schema version field: `v` (currently `1`).
 - `GET /diagnostics/overview` — counts + WebSocket snapshot (connected device nodes per home).
 - `GET /diagnostics/homes/{home_id}/live` — connected device sockets for that home.
 - `GET /health` — liveness.
-- `GET /health/ready` — DB reachability smoke check.
+- `GET /health/ready` — DB reachability smoke check. JSON includes `version` and `presence_handoff_min_confidence` (same default as `TV_STRETCH_PRESENCE_HANDOFF_MIN_CONFIDENCE`, for UI / rig tuning).
 
 ## OTA (firmware hosting)
 
