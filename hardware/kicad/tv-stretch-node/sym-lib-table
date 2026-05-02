@@ -1,0 +1,4 @@
+(sym_lib_table
+  (version 7)
+  (lib (name "tv_stretch")(type "KiCad")(uri "${KIPRJMOD}/libraries/tv_stretch.kicad_sym")(options "")(descr "tv-stretch local symbols"))
+)
