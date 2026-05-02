@@ -3,6 +3,12 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 
+def test_root_redirect(client: TestClient) -> None:
+    r = client.get("/", follow_redirects=False)
+    assert r.status_code == 307
+    assert r.headers.get("location") == "/ui/"
+
+
 def test_health(client: TestClient) -> None:
     r = client.get("/health")
     assert r.status_code == 200

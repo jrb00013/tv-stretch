@@ -3,6 +3,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -61,6 +62,12 @@ app.include_router(diagnostics.router)
 app.include_router(ota_bundle.router)
 app.include_router(device_gateway.router)
 app.include_router(app_gateway.router)
+
+
+@app.get("/", include_in_schema=False)
+def root() -> RedirectResponse:
+    return RedirectResponse(url="/ui/")
+
 
 _static = Path(__file__).resolve().parent.parent / "static"
 if _static.is_dir():
