@@ -17,10 +17,24 @@ class RoomCreate(BaseModel):
     name: str = "room"
 
 
+class RoomBulkCreate(BaseModel):
+    names: list[str]
+
+
 class RoomRead(BaseModel):
     id: uuid.UUID
     home_id: uuid.UUID
     name: str
+
+
+class RoomBulkResponse(BaseModel):
+    created: list[RoomRead]
+    failed: list[str]
+
+
+class RoomBulkDelete(BaseModel):
+    deleted: int
+    failed: list[str]
 
 
 @router.post("", response_model=RoomRead)
@@ -35,6 +49,34 @@ def create_room(
     auth.session.commit()
     auth.session.refresh(r)
     return RoomRead(id=r.id, home_id=r.home_id, name=r.name)
+
+
+@router.post("/bulk", response_model=RoomBulkResponse)
+@limiter.limit("10/minute")
+def bulk_create_rooms(
+    request: Request,
+    body: RoomBulkCreate,
+    auth: AuthenticatedHome = Depends(require_home_auth),
+) -> RoomBulkResponse:
+    created: list[RoomRead] = []
+    failed: list[str] = []
+
+    for name in body.names:
+        existing = auth.session.exec(
+            select(Room).where(Room.home_id == auth.home.id, Room.name == name)
+        ).first()
+        if existing:
+            failed.append(f"{name}: already exists")
+            continue
+        r = Room(home_id=auth.home.id, name=name)
+        auth.session.add(r)
+        created.append(RoomRead(id=r.id, home_id=r.home_id, name=r.name))
+
+    auth.session.commit()
+    for r in created:
+        auth.session.refresh(r)
+        created.append(RoomRead(id=r.id, home_id=r.home_id, name=r.name))
+    return RoomBulkResponse(created=created, failed=failed)
 
 
 @router.get("", response_model=list[RoomRead])
@@ -53,6 +95,22 @@ def get_room(
     r = auth.session.get(Room, room_id)
     if r is None or r.home_id != auth.home.id:
         raise HTTPException(status_code=404, detail="room not found")
+    return RoomRead(id=r.id, home_id=r.home_id, name=r.name)
+
+
+@router.patch("/{room_id}", response_model=RoomRead)
+def update_room(
+    room_id: uuid.UUID,
+    body: RoomCreate,
+    auth: AuthenticatedHome = Depends(require_home_auth),
+) -> RoomRead:
+    r = auth.session.get(Room, room_id)
+    if r is None or r.home_id != auth.home.id:
+        raise HTTPException(status_code=404, detail="room not found")
+    r.name = body.name
+    auth.session.add(r)
+    auth.session.commit()
+    auth.session.refresh(r)
     return RoomRead(id=r.id, home_id=r.home_id, name=r.name)
 
 
