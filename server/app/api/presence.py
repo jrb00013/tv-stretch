@@ -5,9 +5,11 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
+from sqlalchemy import desc
+from sqlmodel import select
 
 from app.config import settings
-from app.models import EventLog, SessionState
+from app.models import EventLog, OccupancyEvent, SessionState
 from app.security.auth import AuthenticatedHome, require_home_auth
 from app.security.rate_limit import limiter
 from app.services import coordinator as coord
@@ -33,7 +35,7 @@ class OccupancyIn(BaseModel):
 
     room_id: uuid.UUID
     confidence: float = Field(ge=0.0, le=1.0)
-    source: str = "optical_slam"
+    source: str = "slam"
     map_id: uuid.UUID | None = None
     pose: dict | None = None
     content_ref: str | None = None
@@ -46,6 +48,19 @@ class OccupancyOut(BaseModel):
     batch_id: str | None = None
     commands: list[dict] = []
     reason: str | None = None
+
+
+class OccupancyHistory(BaseModel):
+    events: list[dict]
+    total: int
+
+
+class SlamUpdate(BaseModel):
+    """SLAM pose update from robot hardware."""
+
+    map_id: uuid.UUID
+    pose: dict
+    timestamp: float
 
 
 @router.post("/occupancy", response_model=OccupancyOut)
@@ -61,6 +76,24 @@ async def report_occupancy(
     When ``confidence`` >= ``TV_STRETCH_PRESENCE_HANDOFF_MIN_CONFIDENCE``, applies the same
     handoff path as REST/WebSocket (session state + ``command_batch`` to HDMI nodes).
     """
+    pose_x = body.pose.get("x_m") if body.pose else None
+    pose_y = body.pose.get("y_m") if body.pose else None
+    pose_yaw = body.pose.get("yaw_rad") if body.pose else None
+
+    auth.session.add(
+        OccupancyEvent(
+            home_id=auth.home.id,
+            room_id=body.room_id,
+            confidence=body.confidence,
+            source=body.source,
+            pose_x=pose_x,
+            pose_y=pose_y,
+            pose_yaw=pose_yaw,
+            map_id=body.map_id,
+        )
+    )
+    auth.session.commit()
+
     if body.confidence < settings.presence_handoff_min_confidence:
         auth.session.add(
             EventLog(
@@ -97,3 +130,49 @@ async def report_occupancy(
     await push_command_batch(auth.home.id, cmds, batch_id=batch_id)
 
     return OccupancyOut(ok=True, handoff=True, batch_id=batch_id, commands=cmds)
+
+
+@router.get("/occupancy/history", response_model=OccupancyHistory)
+@limiter.limit("30/minute")
+async def occupancy_history(
+    request: Request,
+    limit: int = 100,
+    auth: AuthenticatedHome = Depends(require_home_auth),
+) -> OccupancyHistory:
+    """Get recent occupancy events for analytics."""
+    stmt = (
+        select(OccupancyEvent)
+        .where(OccupancyEvent.home_id == auth.home.id)
+        .order_by(desc(OccupancyEvent.created_at))
+        .limit(limit)
+    )
+    events = list(auth.session.exec(stmt).all())
+    return OccupancyHistory(
+        events=[
+            {
+                "id": str(e.id),
+                "room_id": str(e.room_id),
+                "confidence": e.confidence,
+                "source": e.source,
+                "pose": (
+                    {"x_m": e.pose_x, "y_m": e.pose_y, "yaw_rad": e.pose_yaw}
+                    if e.pose_x is not None
+                    else None
+                ),
+                "created_at": e.created_at.isoformat(),
+            }
+            for e in events
+        ],
+        total=len(events),
+    )
+
+
+@router.post("/slam/update", response_model=dict)
+@limiter.limit("60/minute")
+async def slam_update(
+    request: Request,
+    body: SlamUpdate,
+    auth: AuthenticatedHome = Depends(require_home_auth),
+) -> dict:
+    """Handle SLAM map/pose updates from robot hardware."""
+    return {"ok": True, "map_id": str(body.map_id)}
