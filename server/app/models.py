@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy import Column, String, Text, UniqueConstraint
 from sqlmodel import Field, SQLModel
@@ -50,6 +51,21 @@ class SpatialMap(SQLModel, table=True):
     schema_version: str = Field(default="slam.v1", index=True)
     payload_json: str = Field(sa_column=Column(Text, nullable=False))
     updated_at: datetime = Field(default_factory=utcnow)
+
+
+class OccupancyEvent(SQLModel, table=True):
+    """SLAM / occupancy history for analytics and debugging."""
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    home_id: uuid.UUID = Field(foreign_key="home.id", index=True)
+    room_id: uuid.UUID = Field(foreign_key="room.id", index=True)
+    confidence: float = Field(default=0.0)
+    source: str = Field(default="slam")
+    pose_x: float | None = Field(default=None)
+    pose_y: float | None = Field(default=None)
+    pose_yaw: float | None = Field(default=None)
+    map_id: uuid.UUID | None = Field(default=None, foreign_key="spatialmap.id")
+    created_at: datetime = Field(default_factory=utcnow, index=True)
 
 
 class EventLog(SQLModel, table=True):
