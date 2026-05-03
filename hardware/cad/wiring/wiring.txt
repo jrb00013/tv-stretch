@@ -1,0 +1,53 @@
+TV-STRETCH WIRING DIAGRAM
+=========================
+
+USB-C J1:
+---------
+Pin1  VBUS      → +5V (from TV or adapter)
+Pin2  D-        → NC
+Pin3  D+        → NC
+Pin4  GND       → GND
+Pin5  CC1       → 10K to GND (for 5V adapter)
+Pin6  CC2       → NC
+Pin7  SBU1      → NC
+Pin8  SBU2      → NC
+
+HDMI J2:
+--------
+Pin1   TMDS_D2+  → CEC (via 1K series)
+Pin2   TMDS_D2GND → GND
+Pin3   TMDS_D2-  → NC
+Pin4   TMDS_D1+  → NC
+Pin5   TMDS_D1GND→ GND
+Pin6   TMDS_D1-  → NC
+Pin7   TMDS_D0+  → NC
+Pin8   TMDS_D0GND→ GND
+Pin9   TMDS_D0-  → NC
+Pin10  TMDS_CLK+  → NC
+Pin11  TMDS_CLKGND→ GND
+Pin12  TMDS_CLK- → NC
+Pin13  CEC      → 1K series → Pin1 CEC+
+Pin14  NC        → NC
+Pin15  SCL       → NC
+Pin16  SDA       → NC
+Pin17  GND       → GND
+Pin18  +5V       → NC (hot plug detect)
+
+ESP32-C3:
+---------
+GPIO0   → LED (via 330R)
+GPIO1   → CEC TX (via level shift)
+GPIO2   → NC
+GPIO3   → NC
+GPIO4   → NC
+GPIO5   → NC
+GPIO6   → NC
+GPIO7   → NC
+GPIO8   → NC
+GPIO9   → NC
+GPIO10  → NC
+GPIO11  → NC
+
+POWER:
+-------
+5V USB → AMS1117-3.3 → 3.3V ESP32

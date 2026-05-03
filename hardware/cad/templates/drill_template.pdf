@@ -1,0 +1,39 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << >> >>
+endobj
+4 0 obj
+<< /Length  >>
+stream
+%!PS-Adobe-3.0
+/Times-Roman findfont 24 setfont
+100 700 movef (TV-STRETCH DRILL TEMPLATE) show
+100 650 movef (Mounting Hole Pattern) show
+100 580 movef (Scale: 1:1) show
+
+100 500 movef (A) show
+/Courier 12 setfont
+100 450 movef (M4 screws, 75mm spacing) show
+- -4 4 4 re stroke
+100 400 movef (M2 screws for PCB, 45mm spacing) show
+- -2 2 2 re stroke
+100 350 movef (HDMI slot, 14mm x 3mm) show
+100 300 movef (USB-C cutout) show
+endstream
+endobj
+xref
+0 5
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000201 00000 n 
+trailer
+<< /Size 5 /Root 1 0 R >>
+%%EOF

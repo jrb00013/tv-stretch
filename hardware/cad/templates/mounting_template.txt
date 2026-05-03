@@ -1,0 +1,30 @@
+TV-STRETCH MOUNTING TEMPLATE
+============================
+
+SCALE: 1:1 (print at 100%)
+
+SCREW PATTERNS:
+-------------
+
+PCB Mount (M2, 45mm spacing):
+  x: -20mm, +20mm from center
+  y: ±12mm from PCB center
+
+Enclosure Mount (M4, 75mm spacing):
+  x: -35mm, +35mm
+  y: ±25mm from enclosure center
+
+HDMI PANEL CUTOUT:
+----------------
+Width:  14.0mm
+Height:  3.0mm
+
+USB-C CUTOUT:
+-----------
+Width:  8.0mm
+Height:  2.5mm
+
+DRILL SIZES:
+-----------
+M2 hole: 2.5mm diameter
+M4 hole: 4.5mm diameter

@@ -1,0 +1,13 @@
+Name,Description,Part,Count,Unit,Notes
+1,ESP32-C3 module,ESP32-C3-WROOM-02-N4,1,pcs,4MB flash
+2,HDMI CEC buffer,SN74LVCEXP125,1,pcs,3.3V level shift
+3,USB-C connector,USB408-GRN01,1,pcs,1
+4,Ferrite bead,BLM18EG471,1,pcs,470 ohm
+5,Capacitor 10uF,GRM188R60J106,1,pcs,0805
+6,Capacitor 0.1uF,GRM155R71C104,2,pcs,0805
+7,Resistor 10K,CRCW080510K0,2,pcs,1%
+8,Resistor 0,CRCW0805000Z,4,pcs,0805
+9,LED 0603,Red LED,1,pcs,0603
+10,Module pin header,2x4 1.27mm,1,pcs,2x4
+11,M2 screw,M2x6mm,4,pcs, DIN 912
+12,Heat shrink,20mm,50,mm,PET
