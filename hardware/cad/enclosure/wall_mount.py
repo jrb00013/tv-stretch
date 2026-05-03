@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import os
 
-from build123d import Box, Circle, Extrude, Part, Plane, export_step
+from build123d import Box, Circle, extrude, Part, export_step
 
 
 def wall_mount() -> Part:
@@ -19,7 +19,7 @@ def wall_mount() -> Part:
     
     for x in [-25, 25]:
         hole = Circle(4)
-        hole = Extrude(hole, amount=-10)
+        hole = extrude(hole, amount=-10)
         hole = hole.translate((x, 0, 0))
         part = part - hole
     

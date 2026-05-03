@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import os
 
-from build123d import Box, Circle, Extrude, Part, export_step
+from build123d import Box, Circle, extrude, Part, export_step
 
 
 def hdmi_adapter() -> Part:
@@ -19,12 +19,11 @@ def hdmi_adapter() -> Part:
     for x in [-15, 15]:
         for z in [-12, 12]:
             hole = Circle(2.5)
-            hole = Extrude(hole, amount=-10)
+            hole = extrude(hole, amount=-10)
             hole = hole.translate((x, 0, z))
             frame = frame - hole
     
     slot = Box(14, 10, 3)
-    slot = slot.translate((0, 0, 0))
     frame = frame - slot
     
     return frame

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import os
 
-from build123d import Box, Circle, Extrude, Part, export_step
+from build123d import Box, Circle, extrude, Part, export_step
 
 
 def din_rail_mount() -> Part:
@@ -26,7 +26,7 @@ def din_rail_mount() -> Part:
     
     for x in [-20, 0, 20]:
         hole = Circle(3)
-        hole = Extrude(hole, amount=-12)
+        hole = extrude(hole, amount=-12)
         hole = hole.translate((x, 0, 18))
         part = part - hole
     

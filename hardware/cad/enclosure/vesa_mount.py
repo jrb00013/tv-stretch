@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import os
 
-from build123d import Box, Circle, Extrude, Part, export_step
+from build123d import Box, Circle, extrude, Part, export_step
 
 
 def vesa_mount() -> Part:
@@ -19,7 +19,7 @@ def vesa_mount() -> Part:
     for x in [-37.5, 37.5]:
         for z in [-30, 30]:
             hole = Circle(5)
-            hole = Extrude(hole, amount=-12)
+            hole = extrude(hole, amount=-12)
             hole = hole.translate((x, 0, z))
             plate = plate - hole
     

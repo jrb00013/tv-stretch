@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import os
 
-from build123d import Box, Circle, Extrude, Part, export_step
+from build123d import Box, Circle, extrude, Part, export_step
 
 
 def ventilated_enclosure() -> Part:
@@ -19,7 +19,7 @@ def ventilated_enclosure() -> Part:
     for x in range(-30, 31, 10):
         for z in range(-8, 9, 8):
             vent = Circle(3)
-            vent = Extrude(vent, amount=-5)
+            vent = extrude(vent, amount=-5)
             vent = vent.translate((x, 0, z))
             shell = shell - vent
     
