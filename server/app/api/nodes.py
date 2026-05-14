@@ -144,3 +144,32 @@ def delete_node(
         raise HTTPException(status_code=404, detail="node not found")
     auth.session.delete(n)
     auth.session.commit()
+
+
+class NodeBatchDelete(BaseModel):
+    node_ids: list[uuid.UUID]
+
+
+class NodeBatchDeleteResult(BaseModel):
+    deleted: int
+    failed: list[str]
+
+
+@router.post("/bulk-delete", response_model=NodeBatchDeleteResult)
+@limiter.limit("10/minute")
+def bulk_delete_nodes(
+    request: Request,
+    body: NodeBatchDelete,
+    auth: AuthenticatedHome = Depends(require_home_auth),
+) -> NodeBatchDeleteResult:
+    deleted = 0
+    failed = []
+    for node_id in body.node_ids:
+        n = auth.session.get(Node, node_id)
+        if n is None or n.home_id != auth.home.id:
+            failed.append(f"{node_id}: not found")
+            continue
+        auth.session.delete(n)
+        deleted += 1
+    auth.session.commit()
+    return NodeBatchDeleteResult(deleted=deleted, failed=failed)
