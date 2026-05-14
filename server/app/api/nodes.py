@@ -95,6 +95,7 @@ def register_node(
 def list_nodes(
     auth: AuthenticatedHome = Depends(require_home_auth),
 ) -> list[NodeRead]:
+    """List all nodes registered for the authenticated home."""
     nodes = auth.session.exec(select(Node).where(Node.home_id == auth.home.id)).all()
     return [_node_to_read(n) for n in nodes]
 
