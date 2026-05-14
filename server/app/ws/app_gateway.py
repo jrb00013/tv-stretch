@@ -7,7 +7,7 @@ from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from sqlmodel import Session, select
 
 import app.db as db_module
-from app.models import Home, SessionState
+from app.models import Home, Node, Room, SessionState
 from app.services import coordinator as coord
 from app.ws.device_gateway import push_command_batch
 
@@ -60,7 +60,8 @@ async def ws_app(websocket: WebSocket) -> None:
                 continue
             if msg.get("v") != 1:
                 continue
-            if msg.get("type") == "presence":
+            msg_type = msg.get("type")
+            if msg_type == "presence":
                 rid_raw = msg.get("active_room_id")
                 if not rid_raw:
                     continue
@@ -87,7 +88,7 @@ async def ws_app(websocket: WebSocket) -> None:
                 await websocket.send_text(
                     json.dumps({"v": 1, "type": "handoff_applied", "batch_id": batch_id})
                 )
-            elif msg.get("type") == "get_session":
+            elif msg_type == "get_session":
                 with Session(db_module.engine) as session:
                     st = session.get(SessionState, home_id)
                     out: dict = {"v": 1, "type": "session_state", "home_id": str(home_id)}
@@ -102,7 +103,43 @@ async def ws_app(websocket: WebSocket) -> None:
                         out["content_ref"] = None
                         out["updated_at"] = None
                 await websocket.send_text(json.dumps(out))
-            elif msg.get("type") == "ping":
+            elif msg_type == "ping":
                 await websocket.send_text(json.dumps({"v": 1, "type": "pong"}))
+            elif msg_type == "list_rooms":
+                with Session(db_module.engine) as session:
+                    rooms = session.exec(
+                        select(Room).where(Room.home_id == home_id)
+                    ).all()
+                    await websocket.send_text(
+                        json.dumps({
+                            "v": 1,
+                            "type": "room_list",
+                            "rooms": [{"id": str(r.id), "name": r.name} for r in rooms],
+                        })
+                    )
+            elif msg_type == "list_nodes":
+                with Session(db_module.engine) as session:
+                    nodes = session.exec(
+                        select(Node).where(Node.home_id == home_id)
+                    ).all()
+                    await websocket.send_text(
+                        json.dumps({
+                            "v": 1,
+                            "type": "node_list",
+                            "nodes": [
+                                {
+                                    "id": str(n.id),
+                                    "room_id": str(n.room_id),
+                                    "name": n.name,
+                                    "last_seen": n.last_seen_at.isoformat() if n.last_seen_at else None,
+                                }
+                                for n in nodes
+                            ],
+                        })
+                    )
+            elif msg_type == "subscribe_events":
+                await websocket.send_text(
+                    json.dumps({"v": 1, "type": "events_subscribed", "home_id": str(home_id)})
+                )
     except WebSocketDisconnect:
         pass
