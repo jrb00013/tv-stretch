@@ -142,6 +142,20 @@ class HomeStatistics(BaseModel):
     last_handoff_at: str | None = None
 
 
+class HomeExport(BaseModel):
+    home: dict
+    rooms: list[dict]
+    nodes: list[dict]
+    session_state: dict | None
+    spatial_maps: list[dict]
+
+
+class HomeImport(BaseModel):
+    home_name: str
+    rooms: list[str]
+    skip_nodes: bool = True
+
+
 @router.get("/{home_id}/statistics", response_model=HomeStatistics)
 def get_home_statistics(
     home_id: uuid.UUID,
@@ -207,3 +221,55 @@ def get_home_statistics(
         occupancy_events_24h=len(occupancy_24h),
         last_handoff_at=last_handoff.created_at.isoformat() if last_handoff else None,
     )
+
+
+@router.get("/{home_id}/export", response_model=HomeExport)
+def export_home(
+    home_id: uuid.UUID,
+    session: Session = Depends(get_session),
+    auth: AuthenticatedHome = Depends(require_home_auth),
+) -> HomeExport:
+    if auth.home.id != home_id:
+        raise HTTPException(status_code=404, detail="home not found")
+
+    home = session.get(Home, home_id)
+    rooms = list(session.exec(select(Room).where(Room.home_id == home_id)).all())
+    nodes = list(session.exec(select(Node).where(Node.home_id == home_id)).all())
+    st = session.get(SessionState, home_id)
+    maps = list(session.exec(select(SpatialMap).where(SpatialMap.home_id == home_id)).all())
+
+    return HomeExport(
+        home={"id": str(home.id), "name": home.name},
+        rooms=[{"id": str(r.id), "name": r.name} for r in rooms],
+        nodes=[{"id": str(n.id), "room_id": str(n.room_id), "name": n.name} for n in nodes],
+        session_state={
+            "active_room_id": str(st.active_room_id) if st and st.active_room_id else None,
+            "content_ref": st.content_ref if st else None,
+        } if st else None,
+        spatial_maps=[{"id": str(m.id), "label": m.label, "schema_version": m.schema_version} for m in maps],
+    )
+
+
+@router.post("/import", response_model=HomeCreated)
+@limiter.limit("5/minute")
+def import_home(
+    request: Request,
+    body: HomeImport,
+    session: Session = Depends(get_session),
+) -> HomeCreated:
+    token = secrets.token_urlsafe(32)
+    h = Home(name=body.home_name, control_token=token)
+    session.add(h)
+    session.commit()
+    session.refresh(h)
+
+    room_map = {}
+    for name in body.rooms:
+        r = Room(home_id=h.id, name=name)
+        session.add(r)
+        session.commit()
+        session.refresh(r)
+        room_map[name] = r
+
+    session.commit()
+    return HomeCreated(id=h.id, name=h.name, control_token=h.control_token)
