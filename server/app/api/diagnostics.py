@@ -84,3 +84,16 @@ async def webhook(
         await push_command_batch(home.id, cmds, batch_id=batch_id)
         return {"ok": True, "event": "handoff", "batch_id": batch_id}
     return {"ok": False, "error": "unsupported_event"}
+
+
+@router.get("/connections", response_model=dict)
+def connection_metrics() -> dict:
+    """Get WebSocket connection metrics."""
+    snap = hub.snapshot()
+    total_connections = sum(
+        info.get("device_connections", 0) for info in snap.get("homes", {}).values()
+    )
+    return {
+        "total_connections": total_connections,
+        "by_home": snap.get("homes", {}),
+    }
