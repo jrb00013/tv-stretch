@@ -82,6 +82,13 @@ def root() -> RedirectResponse:
     return RedirectResponse(url="/ui/")
 
 
+@app.middleware("http")
+async def add_version_header(request, call_next):
+    response = await call_next(request)
+    response.headers["X-API-Version"] = settings.api_version
+    return response
+
+
 _static = Path(__file__).resolve().parent.parent / "static"
 if _static.is_dir():
     app.mount("/ui", StaticFiles(directory=str(_static), html=True), name="ui")
