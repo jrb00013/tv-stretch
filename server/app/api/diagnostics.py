@@ -8,7 +8,7 @@ from sqlmodel import Session, select
 
 from app.db import get_session
 from app.models import Home, Node, Room
-from app.ws.device_gateway import hub
+from app.ws.device_gateway import hub, push_command_batch
 
 router = APIRouter(prefix="/diagnostics", tags=["diagnostics"])
 
@@ -18,6 +18,11 @@ class Overview(BaseModel):
     rooms: int
     nodes: int
     websocket: dict
+
+
+class CommandSimulate(BaseModel):
+    node_id: uuid.UUID
+    command: dict
 
 
 @router.get("/overview", response_model=Overview)
@@ -34,3 +39,16 @@ def home_live(home_id: uuid.UUID, session: Session = Depends(get_session)) -> di
         raise HTTPException(status_code=404, detail="home not found")
     snap = hub.snapshot()
     return snap.get("homes", {}).get(str(home_id), {"device_connections": 0, "nodes": []})
+
+
+@router.post("/simulate/command", response_model=dict)
+async def simulate_command(
+    body: CommandSimulate,
+    session: Session = Depends(get_session),
+) -> dict:
+    node = session.get(Node, body.node_id)
+    if not node:
+        raise HTTPException(status_code=404, detail="node not found")
+    batch_id = str(uuid.uuid4())
+    await push_command_batch(node.home_id, [body.command], batch_id=batch_id)
+    return {"ok": True, "batch_id": batch_id, "node_id": str(node.id)}
