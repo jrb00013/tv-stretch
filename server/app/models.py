@@ -33,6 +33,9 @@ class Node(SQLModel, table=True):
     api_key: str = Field(sa_column=Column(String(128), unique=True, index=True))
     last_seen_at: datetime | None = Field(default=None)
     firmware_version: str | None = Field(default=None, sa_column=Column(String(32), nullable=True))
+    cec_enabled: bool = Field(default=True)
+    physical_address: int = Field(default=0x2000)
+    config_json: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
 
 
 class SessionState(SQLModel, table=True):
