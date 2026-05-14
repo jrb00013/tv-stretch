@@ -86,14 +86,13 @@ def read_session_state(
 @router.get("/events", response_model=list[dict])
 def list_events(
     limit: int = Query(50, ge=1, le=500),
+    kind: str | None = Query(None, description="Filter by event kind"),
     auth: AuthenticatedHome = Depends(require_home_auth),
 ) -> list[dict]:
-    stmt = (
-        select(EventLog)
-        .where(EventLog.home_id == auth.home.id)
-        .order_by(desc(EventLog.created_at))
-        .limit(limit)
-    )
+    stmt = select(EventLog).where(EventLog.home_id == auth.home.id)
+    if kind:
+        stmt = stmt.where(EventLog.kind == kind)
+    stmt = stmt.order_by(desc(EventLog.created_at)).limit(limit)
     rows = list(auth.session.exec(stmt).all())
     return [
         {
@@ -104,6 +103,29 @@ def list_events(
         }
         for r in rows
     ]
+
+
+@router.get("/events/kinds", response_model=list[str])
+def list_event_kinds(
+    auth: AuthenticatedHome = Depends(require_home_auth),
+) -> list[str]:
+    stmt = (
+        select(EventLog.kind)
+        .where(EventLog.home_id == auth.home.id)
+        .distinct()
+    )
+    rows = list(auth.session.exec(stmt).all())
+    return sorted(set(rows))
+
+
+@router.delete("/events", status_code=204)
+def clear_events(
+    auth: AuthenticatedHome = Depends(require_home_auth),
+) -> None:
+    rows = list(auth.session.exec(select(EventLog).where(EventLog.home_id == auth.home.id)).all())
+    for r in rows:
+        auth.session.delete(r)
+    auth.session.commit()
 
 
 @router.get("/health", response_model=HomeHealth)
