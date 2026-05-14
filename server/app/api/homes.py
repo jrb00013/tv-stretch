@@ -2,13 +2,15 @@ from __future__ import annotations
 
 import secrets
 import uuid
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
+from sqlalchemy import func
 from sqlmodel import Session, select
 
 from app.db import get_session
-from app.models import EventLog, Home, Node, Room, SessionState, SpatialMap
+from app.models import EventLog, Home, Node, OccupancyEvent, Room, SessionState, SpatialMap
 from app.security.auth import AuthenticatedHome, require_home_auth
 from app.security.rate_limit import limiter
 
@@ -126,3 +128,82 @@ def delete_home(
         session.delete(r)
     session.delete(h)
     session.commit()
+
+
+class HomeStatistics(BaseModel):
+    home_id: uuid.UUID
+    room_count: int
+    node_count: int
+    active_node_count: int
+    node_online_count: int
+    node_offline_count: int
+    event_count_24h: int
+    occupancy_events_24h: int
+    last_handoff_at: str | None = None
+
+
+@router.get("/{home_id}/statistics", response_model=HomeStatistics)
+def get_home_statistics(
+    home_id: uuid.UUID,
+    session: Session = Depends(get_session),
+    auth: AuthenticatedHome = Depends(require_home_auth),
+) -> HomeStatistics:
+    if auth.home.id != home_id:
+        raise HTTPException(status_code=404, detail="home not found")
+
+    rooms = list(session.exec(select(Room).where(Room.home_id == home_id)).all())
+    nodes = list(session.exec(select(Node).where(Node.home_id == home_id)).all())
+
+    now = datetime.now()
+    one_day_ago = now - timedelta(days=1)
+
+    events_24h = list(
+        session.exec(
+            select(EventLog).where(
+                EventLog.home_id == home_id,
+                EventLog.created_at >= one_day_ago,
+            )
+        ).all()
+    )
+
+    occupancy_24h = list(
+        session.exec(
+            select(OccupancyEvent).where(
+                OccupancyEvent.home_id == home_id,
+                OccupancyEvent.created_at >= one_day_ago,
+            )
+        ).all()
+    )
+
+    last_handoff = session.exec(
+        select(EventLog).where(
+            EventLog.home_id == home_id,
+            EventLog.kind == "handoff",
+        ).order_by(EventLog.created_at.desc()).limit(1)
+    ).first()
+
+    online_count = 0
+    offline_count = 0
+    active_count = 0
+    for node in nodes:
+        if node.last_seen_at:
+            if now - node.last_seen_at < timedelta(minutes=1):
+                online_count += 1
+            elif now - node.last_seen_at < timedelta(minutes=5):
+                active_count += 1
+            else:
+                offline_count += 1
+        else:
+            offline_count += 1
+
+    return HomeStatistics(
+        home_id=home_id,
+        room_count=len(rooms),
+        node_count=len(nodes),
+        active_node_count=active_count,
+        node_online_count=online_count,
+        node_offline_count=offline_count,
+        event_count_24h=len(events_24h),
+        occupancy_events_24h=len(occupancy_24h),
+        last_handoff_at=last_handoff.created_at.isoformat() if last_handoff else None,
+    )
