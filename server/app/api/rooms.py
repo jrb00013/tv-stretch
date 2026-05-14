@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlmodel import select
 
-from app.models import Node, Room
+from app.models import EventLog, Node, OccupancyEvent, Room
 from app.security.auth import AuthenticatedHome, require_home_auth
 from app.security.rate_limit import limiter
 
@@ -127,3 +128,56 @@ def delete_room(
         raise HTTPException(status_code=409, detail="room has nodes; delete nodes first")
     auth.session.delete(r)
     auth.session.commit()
+
+
+class RoomStatistics(BaseModel):
+    room_id: uuid.UUID
+    name: str
+    node_count: int
+    has_active_node: bool
+    occupancy_events_24h: int
+    last_handoff_at: str | None = None
+
+
+@router.get("/{room_id}/statistics", response_model=RoomStatistics)
+def get_room_statistics(
+    room_id: uuid.UUID,
+    auth: AuthenticatedHome = Depends(require_home_auth),
+) -> RoomStatistics:
+    r = auth.session.get(Room, room_id)
+    if r is None or r.home_id != auth.home.id:
+        raise HTTPException(status_code=404, detail="room not found")
+
+    nodes = list(auth.session.exec(select(Node).where(Node.room_id == room_id)).all())
+    now = datetime.now()
+    one_day_ago = now - timedelta(days=1)
+
+    occupancy_24h = list(
+        auth.session.exec(
+            select(OccupancyEvent).where(
+                OccupancyEvent.room_id == room_id,
+                OccupancyEvent.created_at >= one_day_ago,
+            )
+        ).all()
+    )
+
+    last_handoff = auth.session.exec(
+        select(EventLog).where(
+            EventLog.home_id == auth.home.id,
+            EventLog.kind == "handoff",
+        ).order_by(EventLog.created_at.desc()).limit(1)
+    ).first()
+
+    has_active_node = any(
+        n.last_seen_at and (now - n.last_seen_at) < timedelta(minutes=1)
+        for n in nodes
+    )
+
+    return RoomStatistics(
+        room_id=room_id,
+        name=r.name,
+        node_count=len(nodes),
+        has_active_node=has_active_node,
+        occupancy_events_24h=len(occupancy_24h),
+        last_handoff_at=last_handoff.created_at.isoformat() if last_handoff else None,
+    )
