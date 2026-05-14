@@ -78,9 +78,13 @@ class CommandQueue:
         return [b for b in self._pending.values() if b.home_id == home_id]
 
     def stats(self) -> dict[str, Any]:
+        by_home: dict[str, int] = {}
+        for b in self._pending.values():
+            hid = str(b.home_id)
+            by_home[hid] = by_home.get(hid, 0) + 1
         return {
             "pending_count": len(self._pending),
-            "by_home": {},
+            "by_home": by_home,
         }
 
 
