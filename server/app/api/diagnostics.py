@@ -8,6 +8,7 @@ from sqlmodel import Session, select
 
 from app.db import get_session
 from app.models import Home, Node, Room
+from app.services import coordinator as coord
 from app.ws.device_gateway import hub, push_command_batch
 
 router = APIRouter(prefix="/diagnostics", tags=["diagnostics"])
@@ -52,3 +53,34 @@ async def simulate_command(
     batch_id = str(uuid.uuid4())
     await push_command_batch(node.home_id, [body.command], batch_id=batch_id)
     return {"ok": True, "batch_id": batch_id, "node_id": str(node.id)}
+
+
+class WebhookPayload(BaseModel):
+    event: str
+    room_id: uuid.UUID | None = None
+    data: dict | None = None
+
+
+@router.post("/webhook", response_model=dict)
+async def webhook(
+    body: WebhookPayload,
+    session: Session = Depends(get_session),
+) -> dict:
+    """External webhook for triggering handoffs or events."""
+    if body.event == "handoff" and body.room_id:
+        room = session.get(Room, body.room_id)
+        if not room:
+            raise HTTPException(status_code=404, detail="room not found")
+        home = session.get(Home, room.home_id)
+        if not home:
+            raise HTTPException(status_code=404, detail="home not found")
+        batch_id, cmds = coord.apply_handoff(
+            session,
+            home.id,
+            body.room_id,
+            content_ref=body.data.get("content_ref") if body.data else None,
+            source="webhook",
+        )
+        await push_command_batch(home.id, cmds, batch_id=batch_id)
+        return {"ok": True, "event": "handoff", "batch_id": batch_id}
+    return {"ok": False, "error": "unsupported_event"}
