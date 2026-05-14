@@ -23,7 +23,7 @@ from app.api import (
 from app.config import settings
 from app.db import init_db
 from app.middleware.logging import LoggingMiddleware, logger
-from app.middleware.security import SecurityHeadersMiddleware
+from app.middleware.security import IPRateLimitMiddleware, RequestTimingMiddleware, SecurityHeadersMiddleware
 from app.security.rate_limit import limiter
 from app.ws import app_gateway, device_gateway
 
@@ -56,6 +56,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(RequestTimingMiddleware, threshold_ms=1000.0)
+app.add_middleware(IPRateLimitMiddleware, max_requests=100, window_seconds=60)
 app.add_middleware(LoggingMiddleware)
 
 app.state.limiter = limiter
