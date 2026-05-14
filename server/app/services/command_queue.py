@@ -77,6 +77,13 @@ class CommandQueue:
     def get_pending_for_home(self, home_id: uuid.UUID) -> list[CommandBatch]:
         return [b for b in self._pending.values() if b.home_id == home_id]
 
+    def clear_home(self, home_id: uuid.UUID) -> int:
+        """Clear all pending batches for a home. Returns count cleared."""
+        to_remove = [bid for bid, b in self._pending.items() if b.home_id == home_id]
+        for bid in to_remove:
+            self._pending.pop(bid, None)
+        return len(to_remove)
+
     def stats(self) -> dict[str, Any]:
         by_home: dict[str, int] = {}
         for b in self._pending.values():
