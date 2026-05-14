@@ -162,6 +162,11 @@ def bulk_delete_nodes(
     body: NodeBatchDelete,
     auth: AuthenticatedHome = Depends(require_home_auth),
 ) -> NodeBatchDeleteResult:
+    """
+    Delete multiple nodes at once.
+
+    Returns the count of successfully deleted nodes and list of failures.
+    """
     deleted = 0
     failed = []
     for node_id in body.node_ids:
