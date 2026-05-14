@@ -7,7 +7,7 @@ from sqlmodel import Session, select
 
 from app.config import settings
 from app.db import get_session
-from app.models import Home
+from app.models import Home, Node, Room
 from app.ws.device_gateway import hub
 
 router = APIRouter(tags=["health"])
@@ -34,6 +34,8 @@ def ready(session: Session = Depends(get_session)) -> dict[str, str | float | di
 @router.get("/health/verbose")
 def verbose_health(session: Session = Depends(get_session)) -> dict:
     homes = list(session.exec(select(Home)).all())
+    rooms = list(session.exec(select(Room)).all())
+    nodes = list(session.exec(select(Node)).all())
     return {
         "status": "ready",
         "version": settings.api_version,
@@ -47,9 +49,14 @@ def verbose_health(session: Session = Depends(get_session)) -> dict:
             "max_nodes_per_home": settings.max_nodes_per_home,
             "max_rooms_per_home": settings.max_rooms_per_home,
             "presence_handoff_min_confidence": settings.presence_handoff_min_confidence,
+            "is_production": settings.is_production,
+            "is_development": settings.is_development,
+            "is_testing": settings.is_testing,
         },
         "counts": {
             "homes": len(homes),
+            "rooms": len(rooms),
+            "nodes": len(nodes),
         },
         "websocket": hub.snapshot(),
     }
