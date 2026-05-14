@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
@@ -176,3 +177,29 @@ async def slam_update(
 ) -> dict:
     """Handle SLAM map/pose updates from robot hardware."""
     return {"ok": True, "map_id": str(body.map_id)}
+
+
+class OccupancyCleanup(BaseModel):
+    days_old: int = 7
+
+
+@router.delete("/occupancy/history", status_code=204)
+@limiter.limit("10/minute")
+async def cleanup_occupancy_history(
+    request: Request,
+    body: OccupancyCleanup,
+    auth: AuthenticatedHome = Depends(require_home_auth),
+) -> None:
+    """Delete occupancy events older than specified days."""
+    cutoff = datetime.now() - timedelta(days=body.days_old)
+    events = list(
+        auth.session.exec(
+            select(OccupancyEvent).where(
+                OccupancyEvent.home_id == auth.home.id,
+                OccupancyEvent.created_at < cutoff,
+            )
+        ).all()
+    )
+    for ev in events:
+        auth.session.delete(ev)
+    auth.session.commit()
