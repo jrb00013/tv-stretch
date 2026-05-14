@@ -59,6 +59,7 @@ def list_homes(
     auth: AuthenticatedHome = Depends(require_home_auth),
     session: Session = Depends(get_session),
 ) -> list[HomeSummary]:
+    """List all homes accessible with current token."""
     homes = list(session.exec(select(Home)).all())
     return [HomeSummary(id=h.id, name=h.name) for h in homes]
 
