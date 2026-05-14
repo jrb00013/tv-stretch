@@ -193,3 +193,67 @@ def test_rooms_bulk_create_duplicate(client: TestClient) -> None:
     body = bulk.json()
     assert len(body["created"]) == 1
     assert len(body["failed"]) == 1
+
+
+def test_node_config_update(client: TestClient) -> None:
+    h = client.post("/homes", json={"name": "node_cfg_test"})
+    token = h.json()["control_token"]
+    headers = {"X-Control-Token": token}
+    r = client.post("/rooms", json={"name": "bedroom"}, headers=headers)
+    room_id = r.json()["id"]
+
+    reg = client.post("/nodes/register", json={"room_id": room_id, "name": "node1"}, headers=headers)
+    node_id = reg.json()["node_id"]
+
+    upd = client.patch(f"/nodes/{node_id}", json={"cec_enabled": False, "name": "bedroom_node"}, headers=headers)
+    assert upd.status_code == 200
+    body = upd.json()
+    assert body["cec_enabled"] is False
+    assert body["name"] == "bedroom_node"
+
+
+def test_room_statistics(client: TestClient) -> None:
+    h = client.post("/homes", json={"name": "room_stats_test"})
+    token = h.json()["control_token"]
+    headers = {"X-Control-Token": token}
+    r = client.post("/rooms", json={"name": "living"}, headers=headers)
+    room_id = r.json()["id"]
+
+    reg = client.post("/nodes/register", json={"room_id": room_id, "name": "tv_node"}, headers=headers)
+
+    stats = client.get(f"/rooms/{room_id}/statistics", headers=headers)
+    assert stats.status_code == 200
+    body = stats.json()
+    assert body["room_id"] == room_id
+    assert body["node_count"] == 1
+
+
+def test_home_export(client: TestClient) -> None:
+    h = client.post("/homes", json={"name": "export_test"})
+    token = h.json()["control_token"]
+    headers = {"X-Control-Token": token}
+    client.post("/rooms", json={"name": "kitchen"}, headers=headers)
+    client.post("/rooms", json={"name": "office"}, headers=headers)
+
+    exp = client.get("/homes/me/export", headers=headers)
+    assert exp.status_code == 200
+    body = exp.json()
+    assert body["home"]["name"] == "export_test"
+    assert len(body["rooms"]) == 2
+
+
+def test_home_import(client: TestClient) -> None:
+    imp = client.post("/homes/import", json={"home_name": "imported_home", "rooms": ["r1", "r2"]})
+    assert imp.status_code == 200
+    body = imp.json()
+    assert body["name"] == "imported_home"
+    assert body["control_token"]
+
+
+def test_health_verbose(client: TestClient) -> None:
+    r = client.get("/health/verbose")
+    assert r.status_code == 200
+    body = r.json()
+    assert "python_version" in body
+    assert "platform" in body
+    assert "config" in body
