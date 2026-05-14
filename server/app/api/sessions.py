@@ -84,6 +84,7 @@ async def handoff(
 def read_session_state(
     auth: AuthenticatedHome = Depends(require_home_auth),
 ) -> SessionStateDetail | None:
+    """Get current session state for the home (active room and content ref)."""
     st = auth.session.get(SessionState, auth.home.id)
     if st:
         return SessionStateDetail.from_model(st)
