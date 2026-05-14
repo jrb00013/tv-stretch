@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import uuid
 
+import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 from sqlalchemy import desc
@@ -17,6 +18,7 @@ from app.services.command_queue import check_node_health, get_home_node_health
 from app.ws.device_gateway import push_command_batch
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
+logger = structlog.get_logger(__name__)
 
 
 class HandoffBody(BaseModel):
@@ -60,7 +62,9 @@ async def handoff(
     body: HandoffBody,
     auth: AuthenticatedHome = Depends(require_home_auth),
 ) -> HandoffResult:
+    logger.info("handoff_request", home_id=str(auth.home.id), room_id=str(body.active_room_id))
     if not coord.ensure_room_in_home(auth.session, auth.home.id, body.active_room_id):
+        logger.warning("handoff_room_not_found", room_id=str(body.active_room_id))
         raise HTTPException(status_code=404, detail="room not in home")
 
     batch_id, cmds = coord.apply_handoff(
@@ -72,6 +76,7 @@ async def handoff(
         standby_others=body.standby_others,
     )
     await push_command_batch(auth.home.id, cmds, batch_id=batch_id)
+    logger.info("handoff_completed", batch_id=batch_id, command_count=len(cmds))
     return HandoffResult(ok=True, batch_id=batch_id, commands=cmds)
 
 
