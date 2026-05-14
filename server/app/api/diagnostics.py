@@ -28,6 +28,7 @@ class CommandSimulate(BaseModel):
 
 @router.get("/overview", response_model=Overview)
 def overview(session: Session = Depends(get_session)) -> Overview:
+    """Get server-wide diagnostic overview including counts and WebSocket status."""
     homes = list(session.exec(select(Home)).all())
     rooms = list(session.exec(select(Room)).all())
     nodes = list(session.exec(select(Node)).all())
