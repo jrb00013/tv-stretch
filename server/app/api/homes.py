@@ -46,6 +46,12 @@ class HomeDetail(BaseModel):
 def create_home(
     request: Request, body: HomeCreate, session: Session = Depends(get_session)
 ) -> Home:
+    """
+    Create a new home.
+
+    Returns the home ID and control token. The control token is required
+    for authentication on all protected endpoints.
+    """
     token = secrets.token_urlsafe(32)
     h = Home(name=body.name, control_token=token)
     session.add(h)
