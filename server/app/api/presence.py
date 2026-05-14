@@ -10,7 +10,7 @@ from sqlalchemy import desc
 from sqlmodel import select
 
 from app.config import settings
-from app.models import EventLog, OccupancyEvent, SessionState
+from app.models import EventLog, OccupancyEvent, Room, SessionState
 from app.security.auth import AuthenticatedHome, require_home_auth
 from app.security.rate_limit import limiter
 from app.services import coordinator as coord
@@ -203,3 +203,43 @@ async def cleanup_occupancy_history(
     for ev in events:
         auth.session.delete(ev)
     auth.session.commit()
+
+
+class OccupancyAggregation(BaseModel):
+    room_id: uuid.UUID
+    event_count: int
+    avg_confidence: float
+    max_confidence: float
+
+
+@router.get("/occupancy/aggregate", response_model=list[OccupancyAggregation])
+@limiter.limit("30/minute")
+async def aggregate_occupancy(
+    request: Request,
+    days: int = Query(7, ge=1, le=90),
+    auth: AuthenticatedHome = Depends(require_home_auth),
+) -> list[OccupancyAggregation]:
+    """Get aggregated occupancy stats per room."""
+    cutoff = datetime.now() - timedelta(days=days)
+    rooms = list(auth.session.exec(select(Room).where(Room.home_id == auth.home.id)).all())
+    results = []
+    for room in rooms:
+        events = list(
+            auth.session.exec(
+                select(OccupancyEvent).where(
+                    OccupancyEvent.room_id == room.id,
+                    OccupancyEvent.created_at >= cutoff,
+                )
+            ).all()
+        )
+        if events:
+            confidences = [e.confidence for e in events]
+            results.append(
+                OccupancyAggregation(
+                    room_id=room.id,
+                    event_count=len(events),
+                    avg_confidence=sum(confidences) / len(confidences),
+                    max_confidence=max(confidences),
+                )
+            )
+    return results
