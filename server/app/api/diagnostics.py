@@ -37,6 +37,7 @@ def overview(session: Session = Depends(get_session)) -> Overview:
 
 @router.get("/homes/{home_id}/live", response_model=dict)
 def home_live(home_id: uuid.UUID, session: Session = Depends(get_session)) -> dict:
+    """Get live WebSocket connection status for a specific home."""
     if session.get(Home, home_id) is None:
         raise HTTPException(status_code=404, detail="home not found")
     snap = hub.snapshot()
