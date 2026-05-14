@@ -28,6 +28,12 @@ class BootstrapOut(BaseModel):
 def bootstrap_home_with_rooms(
     body: BootstrapIn, session: Session = Depends(get_session)
 ) -> BootstrapOut:
+    """
+    Quick bootstrap to create a home with multiple rooms in one request.
+
+    This is useful for initial setup or testing. Returns home credentials
+    and created room details.
+    """
     token = secrets.token_urlsafe(32)
     h = Home(name=body.home_name, control_token=token)
     session.add(h)
