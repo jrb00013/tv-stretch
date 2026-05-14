@@ -38,6 +38,10 @@ class RoomBulkDelete(BaseModel):
     failed: list[str]
 
 
+class RoomBulkDeleteRequest(BaseModel):
+    room_ids: list[uuid.UUID]
+
+
 @router.post("", response_model=RoomRead)
 @limiter.limit("20/minute")
 def create_room(
@@ -181,3 +185,27 @@ def get_room_statistics(
         occupancy_events_24h=len(occupancy_24h),
         last_handoff_at=last_handoff.created_at.isoformat() if last_handoff else None,
     )
+
+
+@router.post("/bulk-delete", response_model=RoomBulkDelete)
+@limiter.limit("10/minute")
+def bulk_delete_rooms(
+    request: Request,
+    body: RoomBulkDeleteRequest,
+    auth: AuthenticatedHome = Depends(require_home_auth),
+) -> RoomBulkDelete:
+    deleted = 0
+    failed = []
+    for room_id in body.room_ids:
+        r = auth.session.get(Room, room_id)
+        if r is None or r.home_id != auth.home.id:
+            failed.append(f"{room_id}: not found")
+            continue
+        n = auth.session.exec(select(Node).where(Node.room_id == room_id)).first()
+        if n:
+            failed.append(f"{room_id}: has nodes")
+            continue
+        auth.session.delete(r)
+        deleted += 1
+    auth.session.commit()
+    return RoomBulkDelete(deleted=deleted, failed=failed)
