@@ -194,6 +194,12 @@ def bulk_delete_rooms(
     body: RoomBulkDeleteRequest,
     auth: AuthenticatedHome = Depends(require_home_auth),
 ) -> RoomBulkDelete:
+    """
+    Delete multiple rooms at once.
+
+    Rooms with nodes cannot be deleted. Returns count of successfully
+    deleted rooms and list of failures with reasons.
+    """
     deleted = 0
     failed = []
     for room_id in body.room_ids:
