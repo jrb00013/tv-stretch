@@ -111,6 +111,7 @@ def create_or_replace_map(
 def list_maps(
     auth: AuthenticatedHome = Depends(require_home_auth),
 ) -> list[SpatialMapSummary]:
+    """List all spatial maps stored for the home."""
     rows = list(
         auth.session.exec(select(SpatialMap).where(SpatialMap.home_id == auth.home.id)).all()
     )
