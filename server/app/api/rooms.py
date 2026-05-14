@@ -88,6 +88,7 @@ def bulk_create_rooms(
 def list_rooms(
     auth: AuthenticatedHome = Depends(require_home_auth),
 ) -> list[RoomRead]:
+    """List all rooms for the authenticated home."""
     rows = list(auth.session.exec(select(Room).where(Room.home_id == auth.home.id)).all())
     return [RoomRead(id=r.id, home_id=r.home_id, name=r.name) for r in rows]
 
