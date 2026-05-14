@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -11,6 +12,7 @@ from app.models import EventLog, Node, SessionState
 from app.security.auth import AuthenticatedHome, require_home_auth
 from app.security.rate_limit import limiter
 from app.services import coordinator as coord
+from app.services.coordinator import build_cec_key_command, build_power_command, build_input_select
 from app.services.command_queue import check_node_health, get_home_node_health
 from app.ws.device_gateway import push_command_batch
 
@@ -149,3 +151,87 @@ def node_health(
     if not node or node.home_id != auth.home.id:
         raise HTTPException(status_code=404, detail="node not found")
     return check_node_health(auth.session, node_id)
+
+
+class PowerControl(BaseModel):
+    room_id: uuid.UUID
+    power: bool
+
+
+class CecKeyControl(BaseModel):
+    room_id: uuid.UUID
+    key: str
+
+
+class InputSelect(BaseModel):
+    room_id: uuid.UUID
+    source: str
+
+
+@router.post("/power", response_model=HandoffResult)
+@limiter.limit("10/minute")
+async def power_control(
+    request: Request,
+    body: PowerControl,
+    auth: AuthenticatedHome = Depends(require_home_auth),
+) -> HandoffResult:
+    if not coord.ensure_room_in_home(auth.session, auth.home.id, body.room_id):
+        raise HTTPException(status_code=404, detail="room not in home")
+    cmd = build_power_command(body.power, body.room_id)
+    batch_id = str(uuid.uuid4())
+    await push_command_batch(auth.home.id, [cmd], batch_id=batch_id)
+    auth.session.add(
+        EventLog(
+            home_id=auth.home.id,
+            kind="power_control",
+            payload_json=json.dumps({"room_id": str(body.room_id), "power": body.power, "batch_id": batch_id}),
+        )
+    )
+    auth.session.commit()
+    return HandoffResult(ok=True, batch_id=batch_id, commands=[cmd])
+
+
+@router.post("/cec-key", response_model=HandoffResult)
+@limiter.limit("20/minute")
+async def cec_key_control(
+    request: Request,
+    body: CecKeyControl,
+    auth: AuthenticatedHome = Depends(require_home_auth),
+) -> HandoffResult:
+    if not coord.ensure_room_in_home(auth.session, auth.home.id, body.room_id):
+        raise HTTPException(status_code=404, detail="room not in home")
+    cmd = build_cec_key_command(body.key, body.room_id)
+    batch_id = str(uuid.uuid4())
+    await push_command_batch(auth.home.id, [cmd], batch_id=batch_id)
+    auth.session.add(
+        EventLog(
+            home_id=auth.home.id,
+            kind="cec_key",
+            payload_json=json.dumps({"room_id": str(body.room_id), "key": body.key, "batch_id": batch_id}),
+        )
+    )
+    auth.session.commit()
+    return HandoffResult(ok=True, batch_id=batch_id, commands=[cmd])
+
+
+@router.post("/input-select", response_model=HandoffResult)
+@limiter.limit("10/minute")
+async def input_select_control(
+    request: Request,
+    body: InputSelect,
+    auth: AuthenticatedHome = Depends(require_home_auth),
+) -> HandoffResult:
+    if not coord.ensure_room_in_home(auth.session, auth.home.id, body.room_id):
+        raise HTTPException(status_code=404, detail="room not in home")
+    cmd = build_input_select(body.source, body.room_id)
+    batch_id = str(uuid.uuid4())
+    await push_command_batch(auth.home.id, [cmd], batch_id=batch_id)
+    auth.session.add(
+        EventLog(
+            home_id=auth.home.id,
+            kind="input_select",
+            payload_json=json.dumps({"room_id": str(body.room_id), "source": body.source, "batch_id": batch_id}),
+        )
+    )
+    auth.session.commit()
+    return HandoffResult(ok=True, batch_id=batch_id, commands=[cmd])
