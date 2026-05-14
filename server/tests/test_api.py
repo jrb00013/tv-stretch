@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import uuid
+
 from fastapi.testclient import TestClient
 
 
@@ -94,3 +96,100 @@ def test_diagnostics(client: TestClient) -> None:
     r = client.get("/diagnostics/overview")
     assert r.status_code == 200
     assert "websocket" in r.json()
+
+
+def test_power_control(client: TestClient) -> None:
+    h = client.post("/homes", json={"name": "power_test"})
+    token = h.json()["control_token"]
+    headers = {"X-Control-Token": token}
+    r = client.post("/rooms", json={"name": "living"}, headers=headers)
+    room_id = r.json()["id"]
+
+    pwr = client.post("/sessions/power", json={"room_id": room_id, "power": True}, headers=headers)
+    assert pwr.status_code == 200
+    body = pwr.json()
+    assert body["ok"] is True
+    assert any(c.get("cmd") == "power_set" for c in body["commands"])
+
+
+def test_cec_key_control(client: TestClient) -> None:
+    h = client.post("/homes", json={"name": "cec_test"})
+    token = h.json()["control_token"]
+    headers = {"X-Control-Token": token}
+    r = client.post("/rooms", json={"name": "bedroom"}, headers=headers)
+    room_id = r.json()["id"]
+
+    key = client.post("/sessions/cec-key", json={"room_id": room_id, "key": "ENTER"}, headers=headers)
+    assert key.status_code == 200
+    body = key.json()
+    assert body["ok"] is True
+    assert any(c.get("cmd") == "cec_user_control" for c in body["commands"])
+
+
+def test_input_select(client: TestClient) -> None:
+    h = client.post("/homes", json={"name": "input_test"})
+    token = h.json()["control_token"]
+    headers = {"X-Control-Token": token}
+    r = client.post("/rooms", json={"name": "office"}, headers=headers)
+    room_id = r.json()["id"]
+
+    inp = client.post("/sessions/input-select", json={"room_id": room_id, "source": "HDMI1"}, headers=headers)
+    assert inp.status_code == 200
+    body = inp.json()
+    assert body["ok"] is True
+    assert any(c.get("cmd") == "cec_set_stream_path" for c in body["commands"])
+
+
+def test_home_statistics(client: TestClient) -> None:
+    h = client.post("/homes", json={"name": "stats_test"})
+    token = h.json()["control_token"]
+    headers = {"X-Control-Token": token}
+
+    client.post("/rooms", json={"name": "room1"}, headers=headers)
+    client.post("/rooms", json={"name": "room2"}, headers=headers)
+
+    stats = client.get("/homes/me/statistics", headers=headers)
+    assert stats.status_code == 200
+    body = stats.json()
+    assert body["room_count"] == 2
+    assert body["node_count"] == 0
+
+
+def test_events_filter_by_kind(client: TestClient) -> None:
+    h = client.post("/homes", json={"name": "filter_test"})
+    token = h.json()["control_token"]
+    headers = {"X-Control-Token": token}
+    r = client.post("/rooms", json={"name": "living"}, headers=headers)
+    room_id = r.json()["id"]
+
+    client.post("/sessions/handoff", json={"active_room_id": room_id}, headers=headers)
+    client.post("/sessions/power", json={"room_id": room_id, "power": True}, headers=headers)
+
+    kinds = client.get("/sessions/events/kinds", headers=headers)
+    assert kinds.status_code == 200
+    assert "handoff" in kinds.json()
+    assert "power_control" in kinds.json()
+
+
+def test_rooms_bulk_create(client: TestClient) -> None:
+    h = client.post("/homes", json={"name": "bulk_test"})
+    token = h.json()["control_token"]
+    headers = {"X-Control-Token": token}
+
+    bulk = client.post("/rooms/bulk", json={"names": ["a", "b", "c"]}, headers=headers)
+    assert bulk.status_code == 200
+    body = bulk.json()
+    assert len(body["created"]) == 3
+
+
+def test_rooms_bulk_create_duplicate(client: TestClient) -> None:
+    h = client.post("/homes", json={"name": "dup_test"})
+    token = h.json()["control_token"]
+    headers = {"X-Control-Token": token}
+    client.post("/rooms", json={"name": "existing"}, headers=headers)
+
+    bulk = client.post("/rooms/bulk", json={"names": ["existing", "new"]}, headers=headers)
+    assert bulk.status_code == 200
+    body = bulk.json()
+    assert len(body["created"]) == 1
+    assert len(body["failed"]) == 1
