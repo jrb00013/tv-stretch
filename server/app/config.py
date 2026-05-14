@@ -60,5 +60,9 @@ class Settings(BaseSettings):
     def is_development(self) -> bool:
         return os.getenv("TV_STRETCH_ENV") == "development"
 
+    @property
+    def is_testing(self) -> bool:
+        return os.getenv("TV_STRETCH_ENV") == "testing"
+
 
 settings = Settings()
