@@ -36,6 +36,18 @@ class SpatialMapPayload(BaseModel):
     schema_version: str = "slam.v1"
     payload: dict
 
+    def validate_payload(self) -> list[str]:
+        errors = []
+        if "rooms" in self.payload:
+            for i, room in enumerate(self.payload["rooms"]):
+                if "id" not in room:
+                    errors.append(f"room {i}: missing id")
+                if "polygon_m" in room:
+                    poly = room["polygon_m"]
+                    if not isinstance(poly, list) or len(poly) < 3:
+                        errors.append(f"room {i}: polygon_m must have at least 3 points")
+        return errors
+
 
 class SpatialMapSummary(BaseModel):
     id: uuid.UUID
@@ -60,6 +72,10 @@ def create_or_replace_map(
     auth: AuthenticatedHome = Depends(require_home_auth),
 ) -> SpatialMapSummary:
     """Store SLAM / floor-plan metadata JSON for this home (upsert by label)."""
+    errors = body.validate_payload()
+    if errors:
+        raise HTTPException(status_code=400, detail=f"Invalid payload: {', '.join(errors)}")
+
     existing = auth.session.exec(
         select(SpatialMap).where(SpatialMap.home_id == auth.home.id, SpatialMap.label == body.label)
     ).first()
