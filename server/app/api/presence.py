@@ -140,7 +140,11 @@ async def occupancy_history(
     limit: int = 100,
     auth: AuthenticatedHome = Depends(require_home_auth),
 ) -> OccupancyHistory:
-    """Get recent occupancy events for analytics."""
+    """
+    Get recent occupancy events for analytics.
+
+    Returns up to 'limit' events ordered by most recent first.
+    """
     stmt = (
         select(OccupancyEvent)
         .where(OccupancyEvent.home_id == auth.home.id)
