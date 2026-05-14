@@ -90,6 +90,18 @@ def read_session_state(
     return None
 
 
+@router.get("/by-room/{room_id}", response_model=SessionStateDetail | None)
+def get_session_by_room(
+    room_id: uuid.UUID,
+    auth: AuthenticatedHome = Depends(require_home_auth),
+) -> SessionStateDetail | None:
+    """Get session state if the given room is the active room."""
+    st = auth.session.get(SessionState, auth.home.id)
+    if st and st.active_room_id == room_id:
+        return SessionStateDetail.from_model(st)
+    return None
+
+
 @router.get("/events", response_model=list[dict])
 def list_events(
     limit: int = Query(50, ge=1, le=500),
