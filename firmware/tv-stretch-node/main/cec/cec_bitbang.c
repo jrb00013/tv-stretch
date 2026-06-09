@@ -1,4 +1,5 @@
-#include "cec_bitbang.h"
+#include "cec/cec_bitbang.h"
+#include "cec/cec_rx.h"
 #include "esp_log.h"
 #include "esp_rom_sys.h"
 #include <string.h>
@@ -85,10 +86,17 @@ esp_err_t tvs_cec_send_frame(uint8_t initiator, uint8_t destination, const uint8
     cec_start_bit();
     uint8_t header = (initiator << 4) | (destination & 0x0F);
     ESP_LOGI(TAG, "CEC TX hdr 0x%02X + %u bytes", header, (unsigned)data_len);
+    tvs_cec_set_tx_active(true);
     tvs_cec_send_byte(header, data_len == 0);
     for (size_t i = 0; i < data_len; i++) {
         bool eom = (i == data_len - 1);
         tvs_cec_send_byte(data[i], eom);
     }
+    tvs_cec_set_tx_active(false);
     return ESP_OK;
+}
+
+void tvs_cec_set_tx_active(bool active)
+{
+    tvs_cec_rx_set_tx_active(active);
 }

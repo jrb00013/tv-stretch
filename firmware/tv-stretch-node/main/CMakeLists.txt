@@ -2,18 +2,27 @@ idf_component_register(
     SRCS
         "app_main.c"
         "cec/cec_bitbang.c"
+        "cec/cec_proto.c"
+        "cec/cec_rx.c"
+        "core/tvs_state.c"
+        "core/tvs_cmd_queue.c"
         "net/ws_client.c"
         "net/tvs_wifi.c"
         "prov/tvs_nvs.c"
         "prov/prov_http.c"
         "ota/tvs_ota.c"
+        "sys/tvs_led.c"
+        "sys/tvs_health.c"
+        "sys/tvs_watchdog.c"
     INCLUDE_DIRS
         "."
         "cec"
+        "core"
         "net"
         "proto"
         "prov"
         "ota"
+        "sys"
     REQUIRES
         nvs_flash
         esp_wifi
@@ -26,4 +35,6 @@ idf_component_register(
         app_update
         json
         driver
+        esp_timer
+        esp_task_wdt
 )

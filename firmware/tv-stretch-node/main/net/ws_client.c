@@ -8,6 +8,7 @@ static const char *TAG = "tvs_ws";
 
 static esp_websocket_client_handle_t s_ws;
 static tvs_ws_on_message_cb s_cb;
+static tvs_ws_on_connect_cb s_conn_cb;
 static void *s_ctx;
 static char s_headers[512];
 
@@ -16,9 +17,11 @@ static void ws_event(void *handler_args, esp_event_base_t base, int32_t event_id
     switch (event_id) {
     case WEBSOCKET_EVENT_CONNECTED:
         ESP_LOGI(TAG, "WS connected");
+        if (s_conn_cb) s_conn_cb(true, s_ctx);
         break;
     case WEBSOCKET_EVENT_DISCONNECTED:
         ESP_LOGW(TAG, "WS disconnected");
+        if (s_conn_cb) s_conn_cb(false, s_ctx);
         break;
     case WEBSOCKET_EVENT_DATA:
         if (data->op_code == 0x01 && data->data_ptr && data->data_len > 0 && s_cb) {
@@ -39,11 +42,13 @@ static void ws_event(void *handler_args, esp_event_base_t base, int32_t event_id
 }
 
 esp_err_t tvs_ws_start(const char *ws_uri, const char *api_key, const char *home_id,
-                       const char *room_id, tvs_ws_on_message_cb on_message, void *ctx) {
+                       const char *room_id, tvs_ws_on_message_cb on_message,
+                       tvs_ws_on_connect_cb on_connect, void *ctx) {
     if (s_ws) {
         tvs_ws_stop();
     }
     s_cb = on_message;
+    s_conn_cb = on_connect;
     s_ctx = ctx;
 
     snprintf(

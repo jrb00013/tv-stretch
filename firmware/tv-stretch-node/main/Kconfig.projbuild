@@ -36,11 +36,24 @@ menu "TV Stretch Node Configuration"
         help
             Home / tenant identifier.
 
+    config TVS_CEC_LOGICAL_ADDR
+        int "CEC logical address for this node"
+        default 4
+        range 0 14
+        help
+            Logical address claimed on CEC bus. Playback 1 (0x04) is typical for a streaming stick.
+
     config TVS_CEC_GPIO
         int "GPIO number for HDMI CEC"
         default 4
         help
             ESP32-C3 GPIO wired to HDMI pin 13 (CEC).
+
+    config TVS_CEC_RX_ENABLE
+        bool "Enable CEC receive (GPIO interrupt decode)"
+        default y
+        help
+            When enabled, monitors CEC line for incoming frames.
 
     config TVS_STATUS_LED_ENABLE
         bool "Enable status LED"
@@ -55,9 +68,23 @@ menu "TV Stretch Node Configuration"
         help
             GPIO for activity LED (board dependent).
 
+    config TVS_HEALTH_INTERVAL
+        int "Health telemetry interval (seconds)"
+        default 60
+        range 10 3600
+        help
+            How often to log heap, RSSI, frame counts.
+
+    config TVS_WATCHDOG_TIMEOUT
+        int "Task watchdog timeout (seconds)"
+        default 30
+        range 5 300
+        help
+            ESP-TASK-WDT timeout; main loop feeds every 5s.
+
     config TVS_FW_VERSION
         string "Firmware version string"
-        default "0.3.0"
+        default "0.4.0"
         help
             Reported in hello JSON and OTA manifest compare.
 

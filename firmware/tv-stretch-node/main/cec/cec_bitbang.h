@@ -18,6 +18,9 @@ esp_err_t tvs_cec_send_byte(uint8_t byte, bool eom);
 esp_err_t tvs_cec_send_frame(uint8_t initiator, uint8_t destination, const uint8_t *data,
                              size_t data_len);
 
+/** Notify RX layer that TX is starting/stopping (to suppress echo detection). */
+void tvs_cec_set_tx_active(bool active);
+
 #ifdef __cplusplus
 }
 #endif
