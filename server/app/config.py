@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     ota_firmware_path: str = ""
     ota_firmware_version: str = "0.6.1"
     presence_handoff_min_confidence: float = 0.65
+    mqtt_broker_url: str = "localhost"
+    mqtt_broker_port: int = 1883
+    mqtt_enabled: bool = True
+    mqtt_prefix: str = "tvstretch"
     debug: bool = False
     log_level: str = "INFO"
     max_nodes_per_home: int = 20

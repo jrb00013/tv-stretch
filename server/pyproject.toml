@@ -16,6 +16,7 @@ dependencies = [
     "slowapi>=0.1.9",
     "structlog>=24.0.0",
     "python-multipart>=0.0.12",
+    "paho-mqtt>=2.0.0",
 ]
 
 [project.optional-dependencies]
