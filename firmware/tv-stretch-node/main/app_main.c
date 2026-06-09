@@ -67,10 +67,15 @@ static void ota_task(void *p)
 {
     ota_job_t *j = (ota_job_t *)p;
     tvs_led_set_pattern(TVS_LED_PATTERN_OTA);
+    tvs_health_inc_ota_attempt();
+    esp_err_t ret;
     if (j->mode == 0) {
-        (void)tvs_ota_apply_from_url(j->s);
+        ret = tvs_ota_apply_from_url(j->s);
     } else {
-        (void)tvs_ota_apply_from_manifest_url(j->s, j->only_diff);
+        ret = tvs_ota_apply_from_manifest_url(j->s, j->only_diff);
+    }
+    if (ret == ESP_OK) {
+        tvs_health_inc_ota_success();
     }
     free(j);
     tvs_led_set_pattern(TVS_LED_PATTERN_CONNECTED);
@@ -85,7 +90,11 @@ static void boot_ota_task(void *arg)
     if (CONFIG_TVS_OTA_BOOT_MANIFEST_URL[0] != '\0') {
         ESP_LOGI(TAG, "Boot OTA check: %s", CONFIG_TVS_OTA_BOOT_MANIFEST_URL);
         tvs_led_set_pattern(TVS_LED_PATTERN_OTA);
-        (void)tvs_ota_apply_from_manifest_url(CONFIG_TVS_OTA_BOOT_MANIFEST_URL, true);
+        tvs_health_inc_ota_attempt();
+        esp_err_t ret = tvs_ota_apply_from_manifest_url(CONFIG_TVS_OTA_BOOT_MANIFEST_URL, true);
+        if (ret == ESP_OK) {
+            tvs_health_inc_ota_success();
+        }
     }
     tvs_led_set_pattern(TVS_LED_PATTERN_CONNECTING);
     vTaskDelete(NULL);
@@ -101,7 +110,7 @@ static void handle_command(const char *cmd, const cJSON *payload)
         return;
     }
     if (strcmp(cmd, "policy") == 0) {
-        ESP_LOGI(TAG, "policy (see server coordinator)");
+        ESP_LOGI(TAG, "policy (see server)");
         (void)payload;
         return;
     }
@@ -130,37 +139,37 @@ static void handle_command(const char *cmd, const cJSON *payload)
         return;
     }
     if (strcmp(cmd, "cec_broadcast_ping") == 0) {
-        uint8_t ping = 0x83;
-        tvs_cec_send_frame(0x0F, 0x0F, &ping, 1);
+        uint8_t ping = CEC_OP_GIVE_PHYSICAL_ADDR;
+        tvs_cec_send_frame(CEC_ADDR_BROADCAST, CEC_ADDR_BROADCAST, &ping, 1);
         tvs_health_inc_cec_tx();
         return;
     }
     if (strcmp(cmd, "cec_standby") == 0) {
-        int initiator = payload_int((cJSON *)payload, "initiator", 0x0F);
-        int destination = payload_int((cJSON *)payload, "destination", 0x00);
+        int initiator = payload_int((cJSON *)payload, "initiator", CONFIG_TVS_CEC_LOGICAL_ADDR);
+        int destination = payload_int((cJSON *)payload, "destination", CEC_ADDR_TV);
         uint8_t op = CEC_OP_STANDBY;
         tvs_cec_send_frame(initiator & 0x0F, destination & 0x0F, &op, 1);
         tvs_health_inc_cec_tx();
         return;
     }
     if (strcmp(cmd, "cec_active_source") == 0 && payload) {
-        int addr = payload_int((cJSON *)payload, "physical_address", 0x2000);
+        int addr = payload_int((cJSON *)payload, "physical_address", CONFIG_TVS_CEC_PHYSICAL_ADDR);
         uint8_t body[3] = {CEC_OP_ACTIVE_SOURCE, (uint8_t)((addr >> 8) & 0xFF), (uint8_t)(addr & 0xFF)};
-        tvs_cec_send_frame(0x0F, 0x0F, body, sizeof(body));
+        tvs_cec_send_frame(CONFIG_TVS_CEC_LOGICAL_ADDR, CEC_ADDR_BROADCAST, body, sizeof(body));
         tvs_health_inc_cec_tx();
         return;
     }
     if (strcmp(cmd, "cec_user_control") == 0 && payload) {
         int key = payload_int((cJSON *)payload, "key", 0);
         uint8_t body[2] = {CEC_OP_USER_CONTROL_PRESSED, (uint8_t)(key & 0xFF)};
-        int initiator = payload_int((cJSON *)payload, "initiator", 0x0F);
-        int destination = payload_int((cJSON *)payload, "destination", 0x00);
+        int initiator = payload_int((cJSON *)payload, "initiator", CONFIG_TVS_CEC_LOGICAL_ADDR);
+        int destination = payload_int((cJSON *)payload, "destination", CEC_ADDR_TV);
         tvs_cec_send_frame(initiator & 0x0F, destination & 0x0F, body, sizeof(body));
         tvs_health_inc_cec_tx();
         return;
     }
     if (strcmp(cmd, "cec_set_stream_path") == 0 && payload) {
-        int addr = payload_int((cJSON *)payload, "physical_address", 0x2000);
+        int addr = payload_int((cJSON *)payload, "physical_address", CONFIG_TVS_CEC_PHYSICAL_ADDR);
         uint8_t body[3] = {CEC_OP_SET_STREAM_PATH, (uint8_t)((addr >> 8) & 0xFF), (uint8_t)(addr & 0xFF)};
         tvs_cec_send_frame(CEC_ADDR_TV, CEC_ADDR_BROADCAST, body, sizeof(body));
         tvs_health_inc_cec_tx();
@@ -185,12 +194,26 @@ static void handle_command(const char *cmd, const cJSON *payload)
         tvs_cec_proto_scan_bus();
         return;
     }
+    if (strcmp(cmd, "health_report") == 0) {
+        char hjson[512];
+        tvs_health_build_json(hjson, sizeof(hjson));
+        tvs_ws_send_text(hjson);
+        return;
+    }
+    if (strcmp(cmd, "reset_health") == 0) {
+        tvs_health_reset();
+        return;
+    }
     ESP_LOGW(TAG, "unknown cmd %s", cmd);
 }
 
 static void cmd_complete_cb(const char *batch_id, const char *cmd, bool ok)
 {
-    ESP_LOGD(TAG, "cmd complete %s/%s ok=%d", batch_id, cmd, ok);
+    if (ok) {
+        tvs_health_inc_ack();
+    } else {
+        tvs_health_inc_nack();
+    }
 }
 
 static void on_cec_frame(uint8_t initiator, uint8_t destination,
@@ -204,7 +227,6 @@ static void process_cmd_queue(void)
 {
     tvs_cmd_entry_t entry;
     while (tvs_cmd_dequeue(&entry)) {
-        tvs_led_pulse();
         cJSON *payload = NULL;
         if (entry.payload_json[0] != '\0') {
             payload = cJSON_Parse(entry.payload_json);
@@ -251,6 +273,7 @@ static void on_ws_message(const char *json, void *ctx)
             }
         }
 
+        tvs_led_pulse();
         char ack[192];
         snprintf(ack, sizeof(ack), "{\"v\":1,\"type\":\"ack\",\"batch_id\":\"%s\",\"ok\":true}", bs);
         tvs_ws_send_text(ack);
@@ -269,6 +292,9 @@ static void on_ws_connect(bool connected, void *ctx)
                  "{\"v\":1,\"type\":\"hello\",\"node\":{\"room_id\":\"%s\",\"home_id\":\"%s\",\"fw\":\"%s\"}}",
                  s_room_id, s_home_id, CONFIG_TVS_FW_VERSION);
         tvs_ws_send_text(hello);
+
+        tvs_health_reset();
+        tvs_cec_rx_reset_counts();
     } else {
         tvs_health_inc_ws_reconnect();
         tvs_state_transition(TVS_STATE_DISCONNECTED);
@@ -321,16 +347,26 @@ static void health_task(void *arg)
 {
     (void)arg;
     while (1) {
-        vTaskDelay(pdMS_TO_TICKS(60000));
+        vTaskDelay(pdMS_TO_TICKS(CONFIG_TVS_HEALTH_INTERVAL * 1000));
         tvs_health_t h;
         tvs_health_collect(&h);
-        ESP_LOGI(TAG, "health: up=%us rssi=%d cec_tx=%lu cec_rx=%lu ws_recon=%lu "
-                 "heap=%lu min_heap=%lu cmdq=%lu",
+
+        ESP_LOGI(TAG, "health: up=%us rssi=%d cec_tx=%lu cec_rx=%lu cec_err=%lu "
+                 "ws_recon=%lu heap=%lu/%lu cmdq=%lu ota=%lu/%lu acks=%lu/%lu",
                  (unsigned)h.uptime_sec, h.wifi_rssi,
                  (unsigned long)h.cec_tx_frames, (unsigned long)h.cec_rx_frames,
+                 (unsigned long)h.cec_rx_errors,
                  (unsigned long)h.ws_reconnects,
                  (unsigned long)h.free_heap, (unsigned long)h.min_free_heap,
-                 (unsigned long)h.cmd_queue_depth);
+                 (unsigned long)h.cmd_queue_depth,
+                 (unsigned long)h.ota_attempts, (unsigned long)h.ota_successes,
+                 (unsigned long)h.ack_count, (unsigned long)h.nack_count);
+
+        if (tvs_state_is_connected()) {
+            char hjson[512];
+            tvs_health_build_json(hjson, sizeof(hjson));
+            tvs_ws_send_text(hjson);
+        }
     }
 }
 
@@ -381,7 +417,7 @@ void app_main(void)
 
 #if CONFIG_TVS_HTTP_PROVISIONING
     if (!tvs_nvs_is_provisioned()) {
-        ESP_LOGW(TAG, "NVS not provisioned — setup SoftAP");
+        ESP_LOGW(TAG, "NVS not provisioned -- setup SoftAP");
         tvs_state_transition(TVS_STATE_PROVISIONING);
         tvs_prov_run_http_setup();
     }
@@ -407,7 +443,10 @@ void app_main(void)
     tvs_state_transition(TVS_STATE_WIFI_CONNECT);
     ESP_ERROR_CHECK(tvs_wifi_start_sta(ssid, pass));
 
+#if CONFIG_TVS_CEC_RX_ENABLE
     tvs_cec_rx_start();
+    ESP_LOGI(TAG, "CEC RX enabled");
+#endif
 
     xTaskCreate(cmd_queue_task, "cmdq", 4096, NULL, 6, NULL);
 

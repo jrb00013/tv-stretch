@@ -27,6 +27,8 @@ void tvs_cec_rx_start(void);
 void tvs_cec_rx_stop(void);
 void tvs_cec_rx_set_tx_active(bool active);
 uint32_t tvs_cec_rx_frame_count(void);
+uint32_t tvs_cec_rx_error_count(void);
+void tvs_cec_rx_reset_counts(void);
 
 #ifdef __cplusplus
 }

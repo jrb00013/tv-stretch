@@ -55,6 +55,19 @@ menu "TV Stretch Node Configuration"
         help
             When enabled, monitors CEC line for incoming frames.
 
+    config TVS_CEC_PHYSICAL_ADDR
+        hex "CEC physical address for this node"
+        default 0x1000
+        range 0x0000 0xFFFF
+        help
+            Physical address on HDMI tree (4 hex digits). 0x1000 = 1.0.0.0 is typical for a leaf node.
+
+    config TVS_CEC_OSD_NAME
+        string "CEC OSD name advertised on bus"
+        default "TV-Stretch Node"
+        help
+            Name returned in response to Give OSD Name (<opcode>0x46</opcode>).
+
     config TVS_STATUS_LED_ENABLE
         bool "Enable status LED"
         default y

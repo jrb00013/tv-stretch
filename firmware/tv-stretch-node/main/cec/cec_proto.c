@@ -1,6 +1,7 @@
 #include "cec/cec_proto.h"
 #include "cec/cec_bitbang.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include <string.h>
 
 static const char *TAG = "tvs_cec_proto";
@@ -9,24 +10,12 @@ static tvs_cec_frame_cb s_frame_cb = NULL;
 static cec_device_info_t s_devices[CEC_SCAN_LOGICAL_ADDRS];
 static bool s_scanning = false;
 static uint8_t s_scan_addr = 0;
+static int64_t s_scan_start_us = 0;
+static cec_device_type_t s_own_device_type = CEC_DEVICE_TYPE_PLAYBACK;
 
 static const char *ADDR_NAMES[16] = {
-    "TV",
-    "REC1",
-    "REC2",
-    "TUN1",
-    "PB1",
-    "AUDIO",
-    "TUN2",
-    "TUN3",
-    "PB2",
-    "REC3",
-    "TUN4",
-    "PB3",
-    "FREE1",
-    "FREE2",
-    "SPECIFIC",
-    "BROADCAST",
+    "TV", "REC1", "REC2", "TUN1", "PB1", "AUDIO", "TUN2", "TUN3",
+    "PB2", "REC3", "TUN4", "PB3", "FREE1", "FREE2", "SPECIFIC", "BROADCAST",
 };
 
 static const char *OPCODE_NAMES[256] = {
@@ -85,17 +74,20 @@ void tvs_cec_proto_process_frame(uint8_t initiator, uint8_t destination,
              initiator, destination, opcode,
              tvs_cec_opcode_name(opcode), body_len);
 
+    if (initiator >= CEC_SCAN_LOGICAL_ADDRS) {
+        return;
+    }
     cec_device_info_t *dev = &s_devices[initiator];
 
     switch (opcode) {
     case CEC_OP_REPORT_PHYSICAL_ADDR:
-        if (body_len >= 3) {
+        if (body_len >= 4) {
             uint16_t pa = ((uint16_t)body[1] << 8) | body[2];
-            cec_device_type_t dt = (cec_device_type_t)(body_len >= 3 ? (body[3] & 0x0F) : 7);
+            cec_device_type_t dt = (cec_device_type_t)(body[3] & 0x0F);
             dev->present = true;
             dev->physical_addr = pa;
             dev->device_type = dt;
-            ESP_LOGI(TAG, "device 0x%X: PA=0x%04X type=%d at %s",
+            ESP_LOGI(TAG, "dev 0x%X PA=0x%04X type=%d %s",
                      initiator, pa, dt, tvs_cec_addr_name(initiator));
         }
         break;
@@ -104,7 +96,8 @@ void tvs_cec_proto_process_frame(uint8_t initiator, uint8_t destination,
         if (body_len >= 2) {
             dev->present = true;
             dev->power_status = (int8_t)body[1];
-            ESP_LOGI(TAG, "device 0x%X power=%d", initiator, body[1]);
+            ESP_LOGI(TAG, "dev 0x%X power=%d %s",
+                     initiator, body[1], tvs_cec_addr_name(initiator));
         }
         break;
 
@@ -115,7 +108,7 @@ void tvs_cec_proto_process_frame(uint8_t initiator, uint8_t destination,
             memcpy(dev->osd_name, &body[1], name_len);
             dev->osd_name[name_len] = '\0';
             dev->present = true;
-            ESP_LOGI(TAG, "device 0x%X OSD='%s'", initiator, dev->osd_name);
+            ESP_LOGI(TAG, "dev 0x%X OSD='%s'", initiator, dev->osd_name);
         }
         break;
 
@@ -123,9 +116,48 @@ void tvs_cec_proto_process_frame(uint8_t initiator, uint8_t destination,
         if (body_len >= 4) {
             dev->present = true;
             dev->vendor_id = ((uint32_t)body[1] << 16) |
-                             ((uint32_t)body[2] << 8) |
-                             body[3];
-            ESP_LOGI(TAG, "device 0x%X vendor=0x%06X", initiator, dev->vendor_id);
+                             ((uint32_t)body[2] << 8) | body[3];
+        }
+        break;
+
+    case CEC_OP_GIVE_PHYSICAL_ADDR:
+        {
+            uint8_t resp[4] = {
+                CEC_OP_REPORT_PHYSICAL_ADDR,
+                (uint8_t)(CONFIG_TVS_CEC_PHYSICAL_ADDR >> 8),
+                (uint8_t)(CONFIG_TVS_CEC_PHYSICAL_ADDR & 0xFF),
+                (uint8_t)s_own_device_type,
+            };
+            tvs_cec_send_frame(CONFIG_TVS_CEC_LOGICAL_ADDR, initiator, resp, 4);
+        }
+        break;
+
+    case CEC_OP_GIVE_OSD_NAME:
+        {
+            const char *name = CONFIG_TVS_CEC_OSD_NAME;
+            size_t name_len = strlen(name);
+            if (name_len > 14) name_len = 14;
+            uint8_t resp[16] = {CEC_OP_SET_OSD_NAME};
+            memcpy(&resp[1], name, name_len);
+            tvs_cec_send_frame(CONFIG_TVS_CEC_LOGICAL_ADDR, initiator, resp, 1 + name_len);
+        }
+        break;
+
+    case CEC_OP_GIVE_DEVICE_POWER_STATUS:
+        {
+            uint8_t resp[2] = {CEC_OP_REPORT_POWER_STATUS, CEC_POWER_STATE_ON};
+            tvs_cec_send_frame(CONFIG_TVS_CEC_LOGICAL_ADDR, initiator, resp, 2);
+        }
+        break;
+
+    case CEC_OP_REQUEST_ACTIVE_SOURCE:
+        {
+            uint8_t resp[3] = {
+                CEC_OP_ACTIVE_SOURCE,
+                (uint8_t)(CONFIG_TVS_CEC_PHYSICAL_ADDR >> 8),
+                (uint8_t)(CONFIG_TVS_CEC_PHYSICAL_ADDR & 0xFF),
+            };
+            tvs_cec_send_frame(CONFIG_TVS_CEC_LOGICAL_ADDR, CEC_ADDR_BROADCAST, resp, 3);
         }
         break;
 
@@ -147,8 +179,17 @@ void tvs_cec_proto_process_frame(uint8_t initiator, uint8_t destination,
         }
         break;
 
+    case CEC_OP_SET_STREAM_PATH:
+        if (body_len >= 3) {
+            uint16_t pa = ((uint16_t)body[1] << 8) | body[2];
+            ESP_LOGI(TAG, "set stream path PA=0x%04X from 0x%X", pa, initiator);
+        }
+        break;
+
     default:
-        ESP_LOGD(TAG, "unhandled opcode 0x%02X", opcode);
+        if (opcode <= 0x7F) {
+            ESP_LOGD(TAG, "unhandled opcode 0x%02X", opcode);
+        }
         break;
     }
 
@@ -159,29 +200,61 @@ void tvs_cec_proto_process_frame(uint8_t initiator, uint8_t destination,
 
 void tvs_cec_proto_scan_bus(void)
 {
-    ESP_LOGI(TAG, "starting CEC bus scan");
+    uint8_t self_addr = CONFIG_TVS_CEC_LOGICAL_ADDR;
+
+    ESP_LOGI(TAG, "CEC bus scan starting (self=0x%X %s)",
+             self_addr, tvs_cec_addr_name(self_addr));
     tvs_cec_proto_reset();
+    s_devices[self_addr].present = true;
+    s_devices[self_addr].logical_addr = self_addr;
+    s_devices[self_addr].physical_addr = CONFIG_TVS_CEC_PHYSICAL_ADDR;
+    s_devices[self_addr].device_type = s_own_device_type;
+
+    s_scanning = true;
+    s_scan_start_us = esp_timer_get_time();
 
     for (uint8_t addr = 0; addr < CEC_ADDR_BROADCAST; addr++) {
-        if (addr == CONFIG_TVS_CEC_LOGICAL_ADDR) {
+        if (addr == self_addr) {
             continue;
         }
+        esp_rom_delay_us(5000);
+
         uint8_t poll_frame[1] = {0};
         esp_err_t err = tvs_cec_send_frame(addr, addr, poll_frame, 0);
         if (err == ESP_OK) {
-            ESP_LOGI(TAG, "CEC scan: addr 0x%X (%s) ACKed", addr, tvs_cec_addr_name(addr));
+            ESP_LOGI(TAG, "scan: addr 0x%X (%s) ACKed", addr, tvs_cec_addr_name(addr));
             s_devices[addr].present = true;
             s_devices[addr].logical_addr = addr;
 
-            tvs_cec_send_frame(CONFIG_TVS_CEC_LOGICAL_ADDR, addr,
-                                (uint8_t[]){CEC_OP_GIVE_PHYSICAL_ADDR}, 1);
-            tvs_cec_send_frame(CONFIG_TVS_CEC_LOGICAL_ADDR, addr,
-                                (uint8_t[]){CEC_OP_GIVE_OSD_NAME}, 1);
-            tvs_cec_send_frame(CONFIG_TVS_CEC_LOGICAL_ADDR, addr,
-                                (uint8_t[]){CEC_OP_GIVE_DEVICE_POWER_STATUS}, 1);
+            tvs_cec_send_frame(self_addr, addr,
+                                (uint8_t[1]){CEC_OP_GIVE_PHYSICAL_ADDR}, 1);
+            esp_rom_delay_us(3000);
+            tvs_cec_send_frame(self_addr, addr,
+                                (uint8_t[1]){CEC_OP_GIVE_OSD_NAME}, 1);
+            esp_rom_delay_us(3000);
+            tvs_cec_send_frame(self_addr, addr,
+                                (uint8_t[1]){CEC_OP_GIVE_DEVICE_POWER_STATUS}, 1);
+            esp_rom_delay_us(3000);
+        } else {
+            s_devices[addr].present = false;
         }
     }
-    ESP_LOGI(TAG, "CEC bus scan complete");
+
+    s_scanning = false;
+    int64_t elapsed = (esp_timer_get_time() - s_scan_start_us) / 1000;
+
+    int found = 0;
+    for (int i = 0; i < CEC_SCAN_LOGICAL_ADDRS; i++) {
+        if (s_devices[i].present) found++;
+    }
+
+    ESP_LOGI(TAG, "CEC bus scan complete: %d devices found in %lldms",
+             found, (long long)elapsed);
+}
+
+bool tvs_cec_proto_is_scanning(void)
+{
+    return s_scanning;
 }
 
 cec_device_info_t *tvs_cec_proto_get_device(uint8_t logical_addr)
@@ -190,6 +263,15 @@ cec_device_info_t *tvs_cec_proto_get_device(uint8_t logical_addr)
         return NULL;
     }
     return &s_devices[logical_addr];
+}
+
+int tvs_cec_proto_get_device_count(void)
+{
+    int count = 0;
+    for (int i = 0; i < CEC_SCAN_LOGICAL_ADDRS; i++) {
+        if (s_devices[i].present) count++;
+    }
+    return count;
 }
 
 const char *tvs_cec_opcode_name(uint8_t opcode)

@@ -16,6 +16,7 @@ typedef enum {
     TVS_LED_PATTERN_COMMAND,
     TVS_LED_PATTERN_ERROR,
     TVS_LED_PATTERN_OTA,
+    TVS_LED_PATTERN_COUNT,
 } tvs_led_pattern_t;
 
 esp_err_t tvs_led_init(gpio_num_t pin);
