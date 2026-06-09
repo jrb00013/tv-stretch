@@ -13,8 +13,10 @@ from app.models import EventLog, Node, SessionState
 from app.security.auth import AuthenticatedHome, require_home_auth
 from app.security.rate_limit import limiter
 from app.services import coordinator as coord
-from app.services.coordinator import build_cec_key_command, build_power_command, build_input_select
 from app.services.command_queue import check_node_health, get_home_node_health
+from app.services.coordinator import build_cec_key_command, build_input_select, build_power_command
+from app.services.mqtt import get_mqtt
+from app.ws.app_gateway import app_hub
 from app.ws.device_gateway import push_command_batch
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
@@ -76,6 +78,29 @@ async def handoff(
         standby_others=body.standby_others,
     )
     await push_command_batch(auth.home.id, cmds, batch_id=batch_id)
+
+    get_mqtt().publish(
+        "handoff",
+        {
+            "room_id": str(body.active_room_id),
+            "batch_id": batch_id,
+            "source": "api",
+            "content_ref": body.content_ref,
+            "standby_others": body.standby_others,
+        },
+        home_id=auth.home.id,
+    )
+    await app_hub.broadcast_json(
+        auth.home.id,
+        {
+            "v": 1,
+            "type": "handoff",
+            "room_id": str(body.active_room_id),
+            "batch_id": batch_id,
+            "source": "api",
+        },
+    )
+
     logger.info("handoff_completed", batch_id=batch_id, command_count=len(cmds))
     return HandoffResult(ok=True, batch_id=batch_id, commands=cmds)
 
@@ -129,11 +154,7 @@ def list_events(
 def list_event_kinds(
     auth: AuthenticatedHome = Depends(require_home_auth),
 ) -> list[str]:
-    stmt = (
-        select(EventLog.kind)
-        .where(EventLog.home_id == auth.home.id)
-        .distinct()
-    )
+    stmt = select(EventLog.kind).where(EventLog.home_id == auth.home.id).distinct()
     rows = list(auth.session.exec(stmt).all())
     return sorted(set(rows))
 
@@ -202,10 +223,29 @@ async def power_control(
         EventLog(
             home_id=auth.home.id,
             kind="power_control",
-            payload_json=json.dumps({"room_id": str(body.room_id), "power": body.power, "batch_id": batch_id}),
+            payload_json=json.dumps(
+                {"room_id": str(body.room_id), "power": body.power, "batch_id": batch_id}
+            ),
         )
     )
     auth.session.commit()
+
+    get_mqtt().publish(
+        "power",
+        {"room_id": str(body.room_id), "power": body.power, "batch_id": batch_id},
+        home_id=auth.home.id,
+    )
+    await app_hub.broadcast_json(
+        auth.home.id,
+        {
+            "v": 1,
+            "type": "power_control",
+            "room_id": str(body.room_id),
+            "power": body.power,
+            "batch_id": batch_id,
+        },
+    )
+
     return HandoffResult(ok=True, batch_id=batch_id, commands=[cmd])
 
 
@@ -225,10 +265,29 @@ async def cec_key_control(
         EventLog(
             home_id=auth.home.id,
             kind="cec_key",
-            payload_json=json.dumps({"room_id": str(body.room_id), "key": body.key, "batch_id": batch_id}),
+            payload_json=json.dumps(
+                {"room_id": str(body.room_id), "key": body.key, "batch_id": batch_id}
+            ),
         )
     )
     auth.session.commit()
+
+    get_mqtt().publish(
+        "cec_key",
+        {"room_id": str(body.room_id), "key": body.key, "batch_id": batch_id},
+        home_id=auth.home.id,
+    )
+    await app_hub.broadcast_json(
+        auth.home.id,
+        {
+            "v": 1,
+            "type": "cec_key",
+            "room_id": str(body.room_id),
+            "key": body.key,
+            "batch_id": batch_id,
+        },
+    )
+
     return HandoffResult(ok=True, batch_id=batch_id, commands=[cmd])
 
 
@@ -248,8 +307,27 @@ async def input_select_control(
         EventLog(
             home_id=auth.home.id,
             kind="input_select",
-            payload_json=json.dumps({"room_id": str(body.room_id), "source": body.source, "batch_id": batch_id}),
+            payload_json=json.dumps(
+                {"room_id": str(body.room_id), "source": body.source, "batch_id": batch_id}
+            ),
         )
     )
     auth.session.commit()
+
+    get_mqtt().publish(
+        "input_select",
+        {"room_id": str(body.room_id), "source": body.source, "batch_id": batch_id},
+        home_id=auth.home.id,
+    )
+    await app_hub.broadcast_json(
+        auth.home.id,
+        {
+            "v": 1,
+            "type": "input_select",
+            "room_id": str(body.room_id),
+            "source": body.source,
+            "batch_id": batch_id,
+        },
+    )
+
     return HandoffResult(ok=True, batch_id=batch_id, commands=[cmd])

@@ -9,6 +9,8 @@ from sqlmodel import Session, select
 from app.db import get_session
 from app.models import Home, Node, Room
 from app.services import coordinator as coord
+from app.services.mqtt import get_mqtt
+from app.ws.app_gateway import app_hub
 from app.ws.device_gateway import hub, push_command_batch
 
 router = APIRouter(prefix="/diagnostics", tags=["diagnostics"])
@@ -32,7 +34,16 @@ def overview(session: Session = Depends(get_session)) -> Overview:
     homes = list(session.exec(select(Home)).all())
     rooms = list(session.exec(select(Room)).all())
     nodes = list(session.exec(select(Node)).all())
-    return Overview(homes=len(homes), rooms=len(rooms), nodes=len(nodes), websocket=hub.snapshot())
+    return Overview(
+        homes=len(homes),
+        rooms=len(rooms),
+        nodes=len(nodes),
+        websocket={
+            "device": hub.snapshot(),
+            "app": app_hub.snapshot(),
+            "mqtt": get_mqtt().connected,
+        },
+    )
 
 
 @router.get("/homes/{home_id}/live", response_model=dict)
