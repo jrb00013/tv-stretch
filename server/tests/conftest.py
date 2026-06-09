@@ -8,6 +8,7 @@ from sqlmodel import Session, SQLModel, create_engine
 import app.db as db_module
 from app.db import get_session
 from app.main import app
+from app.middleware.security import IPRateLimitMiddleware
 from app.security.rate_limit import limiter as rate_limiter
 
 
@@ -15,6 +16,7 @@ from app.security.rate_limit import limiter as rate_limiter
 def reset_rate_limits() -> None:
     """Clear in-memory rate limiter state between tests (shared TestClient host)."""
     rate_limiter.reset()
+    IPRateLimitMiddleware.reset()
     yield
 
 

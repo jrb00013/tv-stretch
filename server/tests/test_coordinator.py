@@ -77,7 +77,7 @@ def test_build_cec_key_command() -> None:
 
 def test_build_input_select() -> None:
     room_id = uuid.uuid4()
-    cmd = build_input_select(source="HDMI1", room_id=room_id)
+    cmd = build_input_select(input_source="HDMI1", room_id=room_id)
     assert cmd["cmd"] == "cec_set_stream_path"
     assert cmd["payload"]["source"] == "HDMI1"
 

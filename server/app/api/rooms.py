@@ -78,9 +78,6 @@ def bulk_create_rooms(
         created.append(RoomRead(id=r.id, home_id=r.home_id, name=r.name))
 
     auth.session.commit()
-    for r in created:
-        auth.session.refresh(r)
-        created.append(RoomRead(id=r.id, home_id=r.home_id, name=r.name))
     return RoomBulkResponse(created=created, failed=failed)
 
 

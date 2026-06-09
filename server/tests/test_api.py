@@ -150,7 +150,8 @@ def test_home_statistics(client: TestClient) -> None:
     client.post("/rooms", json={"name": "room1"}, headers=headers)
     client.post("/rooms", json={"name": "room2"}, headers=headers)
 
-    stats = client.get("/homes/me/statistics", headers=headers)
+    hid = h.json()["id"]
+    stats = client.get(f"/homes/{hid}/statistics", headers=headers)
     assert stats.status_code == 200
     body = stats.json()
     assert body["room_count"] == 2
@@ -225,9 +226,7 @@ def test_room_statistics(client: TestClient) -> None:
     r = client.post("/rooms", json={"name": "living"}, headers=headers)
     room_id = r.json()["id"]
 
-    client.post(
-        "/nodes/register", json={"room_id": room_id, "name": "tv_node"}, headers=headers
-    )
+    client.post("/nodes/register", json={"room_id": room_id, "name": "tv_node"}, headers=headers)
 
     stats = client.get(f"/rooms/{room_id}/statistics", headers=headers)
     assert stats.status_code == 200
@@ -243,7 +242,8 @@ def test_home_export(client: TestClient) -> None:
     client.post("/rooms", json={"name": "kitchen"}, headers=headers)
     client.post("/rooms", json={"name": "office"}, headers=headers)
 
-    exp = client.get("/homes/me/export", headers=headers)
+    hid = h.json()["id"]
+    exp = client.get(f"/homes/{hid}/export", headers=headers)
     assert exp.status_code == 200
     body = exp.json()
     assert body["home"]["name"] == "export_test"
