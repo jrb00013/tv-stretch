@@ -4,7 +4,7 @@ import json
 import uuid
 from datetime import datetime, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import desc
 from sqlmodel import select
@@ -14,6 +14,8 @@ from app.models import EventLog, OccupancyEvent, Room, SessionState
 from app.security.auth import AuthenticatedHome, require_home_auth
 from app.security.rate_limit import limiter
 from app.services import coordinator as coord
+from app.services.mqtt import get_mqtt
+from app.ws.app_gateway import app_hub
 from app.ws.device_gateway import push_command_batch
 
 router = APIRouter(prefix="/presence", tags=["presence"])
@@ -95,6 +97,18 @@ async def report_occupancy(
     )
     auth.session.commit()
 
+    mqtt = get_mqtt()
+    mqtt.publish(
+        "occupancy",
+        {
+            "room_id": str(body.room_id),
+            "confidence": body.confidence,
+            "source": body.source,
+            "pose": body.pose,
+        },
+        home_id=auth.home.id,
+    )
+
     if body.confidence < settings.presence_handoff_min_confidence:
         auth.session.add(
             EventLog(
@@ -111,6 +125,17 @@ async def report_occupancy(
             )
         )
         auth.session.commit()
+        await app_hub.broadcast_json(
+            auth.home.id,
+            {
+                "v": 1,
+                "type": "occupancy_event",
+                "room_id": str(body.room_id),
+                "confidence": body.confidence,
+                "handoff": False,
+                "reason": "below_threshold",
+            },
+        )
         return OccupancyOut(ok=True, handoff=False, reason="below_threshold")
 
     if not coord.ensure_room_in_home(auth.session, auth.home.id, body.room_id):
@@ -118,6 +143,17 @@ async def report_occupancy(
 
     st = auth.session.get(SessionState, auth.home.id)
     if st and st.active_room_id == body.room_id:
+        await app_hub.broadcast_json(
+            auth.home.id,
+            {
+                "v": 1,
+                "type": "occupancy_event",
+                "room_id": str(body.room_id),
+                "confidence": body.confidence,
+                "handoff": False,
+                "reason": "already_active",
+            },
+        )
         return OccupancyOut(ok=True, handoff=False, reason="already_active")
 
     batch_id, cmds = coord.apply_handoff(
@@ -129,6 +165,27 @@ async def report_occupancy(
         standby_others=body.standby_others,
     )
     await push_command_batch(auth.home.id, cmds, batch_id=batch_id)
+
+    mqtt.publish(
+        "handoff",
+        {
+            "room_id": str(body.room_id),
+            "batch_id": batch_id,
+            "source": f"occupancy:{body.source}",
+            "content_ref": body.content_ref,
+        },
+        home_id=auth.home.id,
+    )
+    await app_hub.broadcast_json(
+        auth.home.id,
+        {
+            "v": 1,
+            "type": "handoff",
+            "room_id": str(body.room_id),
+            "batch_id": batch_id,
+            "source": f"occupancy:{body.source}",
+        },
+    )
 
     return OccupancyOut(ok=True, handoff=True, batch_id=batch_id, commands=cmds)
 
@@ -179,7 +236,42 @@ async def slam_update(
     body: SlamUpdate,
     auth: AuthenticatedHome = Depends(require_home_auth),
 ) -> dict:
-    """Handle SLAM map/pose updates from robot hardware."""
+    """Handle SLAM map/pose updates from robot hardware, storing and broadcasting them."""
+    auth.session.add(
+        EventLog(
+            home_id=auth.home.id,
+            kind="slam_update",
+            payload_json=json.dumps(
+                {
+                    "map_id": str(body.map_id),
+                    "pose": body.pose,
+                    "timestamp": body.timestamp,
+                }
+            ),
+        )
+    )
+    auth.session.commit()
+
+    get_mqtt().publish(
+        "slam",
+        {
+            "map_id": str(body.map_id),
+            "pose": body.pose,
+            "timestamp": body.timestamp,
+        },
+        home_id=auth.home.id,
+    )
+    await app_hub.broadcast_json(
+        auth.home.id,
+        {
+            "v": 1,
+            "type": "slam_update",
+            "map_id": str(body.map_id),
+            "pose": body.pose,
+            "timestamp": body.timestamp,
+        },
+    )
+
     return {"ok": True, "map_id": str(body.map_id)}
 
 
