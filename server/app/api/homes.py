@@ -6,7 +6,6 @@ from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
-from sqlalchemy import func
 from sqlmodel import Session, select
 
 from app.db import get_session
@@ -197,10 +196,13 @@ def get_home_statistics(
     )
 
     last_handoff = session.exec(
-        select(EventLog).where(
+        select(EventLog)
+        .where(
             EventLog.home_id == home_id,
             EventLog.kind == "handoff",
-        ).order_by(EventLog.created_at.desc()).limit(1)
+        )
+        .order_by(EventLog.created_at.desc())
+        .limit(1)
     ).first()
 
     online_count = 0
@@ -252,8 +254,12 @@ def export_home(
         session_state={
             "active_room_id": str(st.active_room_id) if st and st.active_room_id else None,
             "content_ref": st.content_ref if st else None,
-        } if st else None,
-        spatial_maps=[{"id": str(m.id), "label": m.label, "schema_version": m.schema_version} for m in maps],
+        }
+        if st
+        else None,
+        spatial_maps=[
+            {"id": str(m.id), "label": m.label, "schema_version": m.schema_version} for m in maps
+        ],
     )
 
 

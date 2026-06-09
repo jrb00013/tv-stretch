@@ -21,7 +21,7 @@ def health() -> dict[str, str]:
 @router.get("/health/ready")
 def ready(session: Session = Depends(get_session)) -> dict[str, str | float | dict]:
     list(session.exec(select(Home).limit(1)).all())
-    ws_snapshot = hub.snapshot()
+    hub.snapshot()
     return {
         "status": "ready",
         "version": settings.api_version,
@@ -45,7 +45,9 @@ def verbose_health(session: Session = Depends(get_session)) -> dict:
         "config": {
             "debug": settings.debug,
             "log_level": settings.log_level,
-            "database_url": settings.database_url.split("@")[-1] if "@" in settings.database_url else "sqlite",
+            "database_url": settings.database_url.split("@")[-1]
+            if "@" in settings.database_url
+            else "sqlite",
             "max_nodes_per_home": settings.max_nodes_per_home,
             "max_rooms_per_home": settings.max_rooms_per_home,
             "presence_handoff_min_confidence": settings.presence_handoff_min_confidence,

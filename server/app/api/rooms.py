@@ -167,15 +167,17 @@ def get_room_statistics(
     )
 
     last_handoff = auth.session.exec(
-        select(EventLog).where(
+        select(EventLog)
+        .where(
             EventLog.home_id == auth.home.id,
             EventLog.kind == "handoff",
-        ).order_by(EventLog.created_at.desc()).limit(1)
+        )
+        .order_by(EventLog.created_at.desc())
+        .limit(1)
     ).first()
 
     has_active_node = any(
-        n.last_seen_at and (now - n.last_seen_at) < timedelta(minutes=1)
-        for n in nodes
+        n.last_seen_at and (now - n.last_seen_at) < timedelta(minutes=1) for n in nodes
     )
 
     return RoomStatistics(

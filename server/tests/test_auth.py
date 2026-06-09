@@ -44,5 +44,7 @@ def test_sessions_require_auth(client: TestClient) -> None:
 
 
 def test_handoff_without_token(client: TestClient) -> None:
-    r = client.post("/sessions/handoff", json={"active_room_id": "00000000-0000-0000-0000-000000000001"})
+    r = client.post(
+        "/sessions/handoff", json={"active_room_id": "00000000-0000-0000-0000-000000000001"}
+    )
     assert r.status_code == 401

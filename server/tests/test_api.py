@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import uuid
-
 from fastapi.testclient import TestClient
 
 
@@ -119,7 +117,9 @@ def test_cec_key_control(client: TestClient) -> None:
     r = client.post("/rooms", json={"name": "bedroom"}, headers=headers)
     room_id = r.json()["id"]
 
-    key = client.post("/sessions/cec-key", json={"room_id": room_id, "key": "ENTER"}, headers=headers)
+    key = client.post(
+        "/sessions/cec-key", json={"room_id": room_id, "key": "ENTER"}, headers=headers
+    )
     assert key.status_code == 200
     body = key.json()
     assert body["ok"] is True
@@ -133,7 +133,9 @@ def test_input_select(client: TestClient) -> None:
     r = client.post("/rooms", json={"name": "office"}, headers=headers)
     room_id = r.json()["id"]
 
-    inp = client.post("/sessions/input-select", json={"room_id": room_id, "source": "HDMI1"}, headers=headers)
+    inp = client.post(
+        "/sessions/input-select", json={"room_id": room_id, "source": "HDMI1"}, headers=headers
+    )
     assert inp.status_code == 200
     body = inp.json()
     assert body["ok"] is True
@@ -202,10 +204,14 @@ def test_node_config_update(client: TestClient) -> None:
     r = client.post("/rooms", json={"name": "bedroom"}, headers=headers)
     room_id = r.json()["id"]
 
-    reg = client.post("/nodes/register", json={"room_id": room_id, "name": "node1"}, headers=headers)
+    reg = client.post(
+        "/nodes/register", json={"room_id": room_id, "name": "node1"}, headers=headers
+    )
     node_id = reg.json()["node_id"]
 
-    upd = client.patch(f"/nodes/{node_id}", json={"cec_enabled": False, "name": "bedroom_node"}, headers=headers)
+    upd = client.patch(
+        f"/nodes/{node_id}", json={"cec_enabled": False, "name": "bedroom_node"}, headers=headers
+    )
     assert upd.status_code == 200
     body = upd.json()
     assert body["cec_enabled"] is False
@@ -219,7 +225,9 @@ def test_room_statistics(client: TestClient) -> None:
     r = client.post("/rooms", json={"name": "living"}, headers=headers)
     room_id = r.json()["id"]
 
-    reg = client.post("/nodes/register", json={"room_id": room_id, "name": "tv_node"}, headers=headers)
+    client.post(
+        "/nodes/register", json={"room_id": room_id, "name": "tv_node"}, headers=headers
+    )
 
     stats = client.get(f"/rooms/{room_id}/statistics", headers=headers)
     assert stats.status_code == 200

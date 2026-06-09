@@ -47,9 +47,7 @@ class IPRateLimitMiddleware(BaseHTTPMiddleware):
         client_ip = request.client.host if request.client else "unknown"
         now = time.time()
         window_start = now - self.window_seconds
-        self._requests[client_ip] = [
-            t for t in self._requests[client_ip] if t > window_start
-        ]
+        self._requests[client_ip] = [t for t in self._requests[client_ip] if t > window_start]
         if len(self._requests[client_ip]) >= self.max_requests:
             return Response(
                 content="Too many requests",

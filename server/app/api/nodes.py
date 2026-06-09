@@ -45,6 +45,7 @@ class NodeUpdate(BaseModel):
 
 def _node_to_read(n: Node) -> NodeRead:
     import json
+
     cfg = None
     if n.config_json:
         try:
@@ -118,6 +119,7 @@ def patch_node(
     auth: AuthenticatedHome = Depends(require_home_auth),
 ) -> NodeRead:
     import json
+
     n = auth.session.get(Node, node_id)
     if n is None or n.home_id != auth.home.id:
         raise HTTPException(status_code=404, detail="node not found")

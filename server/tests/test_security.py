@@ -15,5 +15,9 @@ def test_rate_limit_triggered(client: TestClient) -> None:
     token = h.json()["control_token"]
     headers = {"X-Control-Token": token}
     for _ in range(12):
-        r = client.post("/sessions/handoff", json={"active_room_id": "00000000-0000-0000-0000-000000000001"}, headers=headers)
+        r = client.post(
+            "/sessions/handoff",
+            json={"active_room_id": "00000000-0000-0000-0000-000000000001"},
+            headers=headers,
+        )
     assert r.status_code == 429
