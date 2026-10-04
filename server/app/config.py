@@ -16,6 +16,15 @@ class Settings(BaseSettings):
     ota_firmware_path: str = ""
     ota_firmware_version: str = "0.6.1"
     presence_handoff_min_confidence: float = 0.65
+    #: Seconds of continuous above-threshold occupancy before a handoff fires.
+    #: Defaults to 0 (off) so a single reading keeps handing off immediately; raise it
+    #: to stop sensor noise / passers-by from thrashing the TVs.
+    presence_dwell_seconds: float = 0.0
+    #: A reporting gap longer than this restarts the dwell timer.
+    presence_dwell_max_gap_seconds: float = 30.0
+    #: Seconds of sustained below-threshold reporting in the active room before the
+    #: TVs are told to stand by (0 = off).
+    presence_release_seconds: float = 0.0
     mqtt_broker_url: str = "localhost"
     mqtt_broker_port: int = 1883
     mqtt_enabled: bool = True
@@ -30,6 +39,15 @@ class Settings(BaseSettings):
     def validate_confidence(cls, v: float) -> float:
         if not 0.0 <= v <= 1.0:
             raise ValueError("presence_handoff_min_confidence must be between 0 and 1")
+        return v
+
+    @field_validator(
+        "presence_dwell_seconds", "presence_dwell_max_gap_seconds", "presence_release_seconds"
+    )
+    @classmethod
+    def validate_non_negative_seconds(cls, v: float) -> float:
+        if v < 0:
+            raise ValueError("presence timing settings must be >= 0 seconds")
         return v
 
     @field_validator("log_level")

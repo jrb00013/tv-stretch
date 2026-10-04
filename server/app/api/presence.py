@@ -16,6 +16,7 @@ from app.security.rate_limit import limiter
 from app.services import coordinator as coord
 from app.services import quiet_hours as qh
 from app.services.mqtt import get_mqtt
+from app.services.presence_hysteresis import get_presence_tracker
 from app.ws.app_gateway import app_hub
 from app.ws.device_gateway import push_command_batch
 
@@ -52,6 +53,10 @@ class OccupancyOut(BaseModel):
     batch_id: str | None = None
     commands: list[dict] = []
     reason: str | None = None
+    #: Seconds of dwell still required when ``reason == "dwell"``.
+    dwell_remaining_seconds: float | None = None
+    #: Set when sustained low confidence stood the TVs down.
+    released: bool = False
 
 
 class OccupancyHistory(BaseModel):
@@ -65,6 +70,59 @@ class SlamUpdate(BaseModel):
     map_id: uuid.UUID
     pose: dict
     timestamp: float
+
+
+async def _maybe_release(auth: AuthenticatedHome, body: OccupancyIn) -> bool:
+    """Stand the TVs down when the active room has been empty long enough.
+
+    Driven by the *existing* below-threshold reporting path — no new endpoint and no
+    new client behaviour: a sensor that keeps saying "nobody here" eventually gets
+    the TVs to stand by instead of leaving them playing to an empty room.
+    """
+    st = auth.session.get(SessionState, auth.home.id)
+    active_room_id = st.active_room_id if st else None
+    if active_room_id is None or active_room_id != body.room_id:
+        get_presence_tracker().clear_active(auth.home.id)
+        return False
+
+    decision = get_presence_tracker().observe_vacancy(auth.home.id, active_room_id)
+    if not decision.release:
+        return False
+
+    batch_id, cmds = coord.apply_standby_all(auth.session, auth.home.id)
+    await push_command_batch(auth.home.id, cmds, batch_id=batch_id)
+    st.active_room_id = None
+    st.content_ref = None
+    st.updated_at = utcnow()
+    auth.session.add(st)
+    auth.session.commit()
+
+    get_mqtt().publish(
+        "standby_all",
+        {"room_id": str(active_room_id), "batch_id": batch_id, "source": "presence_release"},
+        home_id=auth.home.id,
+    )
+    await app_hub.broadcast_json(
+        auth.home.id,
+        {
+            "v": 1,
+            "type": "standby_all",
+            "room_id": str(active_room_id),
+            "batch_id": batch_id,
+            "source": "presence_release",
+        },
+    )
+    return True
+
+
+@router.get("/hysteresis", response_model=dict)
+@limiter.limit("30/minute")
+async def presence_hysteresis(
+    request: Request,
+    auth: AuthenticatedHome = Depends(require_home_auth),
+) -> dict:
+    """Current dwell / vacancy state for this home (diagnostics and UI)."""
+    return get_presence_tracker().snapshot(auth.home.id)
 
 
 @router.post("/occupancy", response_model=OccupancyOut)
@@ -137,7 +195,8 @@ async def report_occupancy(
                 "reason": "below_threshold",
             },
         )
-        return OccupancyOut(ok=True, handoff=False, reason="below_threshold")
+        released = await _maybe_release(auth, body)
+        return OccupancyOut(ok=True, handoff=False, reason="below_threshold", released=released)
 
     if not coord.ensure_room_in_home(auth.session, auth.home.id, body.room_id):
         raise HTTPException(status_code=404, detail="room not in home")
@@ -162,6 +221,28 @@ async def report_occupancy(
         )
         return OccupancyOut(ok=True, handoff=False, reason="already_active")
 
+    tracker = get_presence_tracker()
+    dwell = tracker.observe(auth.home.id, body.room_id, body.confidence)
+    if dwell.action == "wait":
+        await app_hub.broadcast_json(
+            auth.home.id,
+            {
+                "v": 1,
+                "type": "occupancy_event",
+                "room_id": str(body.room_id),
+                "confidence": body.confidence,
+                "handoff": False,
+                "reason": "dwell",
+                "dwell_remaining_seconds": dwell.remaining_seconds,
+            },
+        )
+        return OccupancyOut(
+            ok=True,
+            handoff=False,
+            reason="dwell",
+            dwell_remaining_seconds=dwell.remaining_seconds,
+        )
+
     batch_id, cmds = coord.apply_handoff(
         auth.session,
         auth.home.id,
@@ -171,6 +252,7 @@ async def report_occupancy(
         standby_others=body.standby_others,
     )
     await push_command_batch(auth.home.id, cmds, batch_id=batch_id)
+    tracker.clear_active(auth.home.id)
 
     mqtt.publish(
         "handoff",

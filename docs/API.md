@@ -123,6 +123,44 @@ Set `TV_STRETCH_PUBLIC_BASE_URL` so manifest URLs are reachable from the device 
 
 - `GET /sessions/events?limit=50` — recent `EventLog` rows (handoffs, device acks, device events, `occupancy_below_threshold`). Requires `X-Control-Token`.
 
+## Presence hysteresis (dwell + vacancy release)
+
+One above-threshold reading is not evidence that somebody settled in — SLAM noise, someone
+crossing the doorway, or a pet all produce one, and each switches the TV. Two opt-in
+hysteresis controls sit in front of the occupancy handoff:
+
+| Env var | Default | Effect |
+|---|---|---|
+| `TV_STRETCH_PRESENCE_DWELL_SECONDS` | `0` (off) | Continuous above-threshold occupancy required before a handoff fires |
+| `TV_STRETCH_PRESENCE_DWELL_MAX_GAP_SECONDS` | `30` | A reporting gap longer than this restarts the dwell timer |
+| `TV_STRETCH_PRESENCE_RELEASE_SECONDS` | `0` (off) | Sustained below-threshold reporting in the **active** room before the TVs stand by |
+
+Defaults are `0` so existing behaviour is unchanged: enable them per deployment.
+
+Dwell semantics:
+
+- The clock starts at the first qualifying reading for a room and only advances while readings
+  for **that same room** keep arriving.
+- Switching target room, or a gap longer than `*_MAX_GAP_SECONDS`, restarts it.
+- While waiting, `POST /presence/occupancy` returns `200` with `handoff: false`,
+  `reason: "dwell"` and `dwell_remaining_seconds`. Readings are still stored; session state,
+  events and command batches are untouched.
+- Order of checks: threshold → quiet hours → already-active → dwell → handoff.
+
+Vacancy release:
+
+- Driven by the **existing** below-threshold path — no new endpoint, no new client behaviour.
+  A sensor that keeps reporting the active room as empty eventually gets a `standby_all`
+  command batch, and session state is cleared (`active_room_id: null`, `content_ref: null`).
+- The first low reading starts the clock, so a release always needs at least two observations.
+- Vacancy reported for a room that is *not* the active room never releases anything.
+- Release events use kind `standby_all`; the presence release also publishes MQTT
+  `standby_all` with `source: presence_release`.
+
+- `GET /presence/hysteresis` — current candidate (`room_id`, `reports`, `confidence`,
+  `first_seen_at`), `vacant_since` and the effective timings. Requires `X-Control-Token`.
+- Tracker state is in-memory per home, so a restart clears a pending dwell.
+
 ## Quiet hours (do-not-disturb)
 
 A per-home window that suppresses **automatic** TV handoffs — nobody wants the living-room TV
