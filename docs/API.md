@@ -112,6 +112,41 @@ Schema version field: `v` (currently `1`).
 - `GET /health` — liveness.
 - `GET /health/ready` — DB reachability smoke check. JSON includes `version` and `presence_handoff_min_confidence` (same default as `TV_STRETCH_PRESENCE_HANDOFF_MIN_CONFIDENCE`, for UI / rig tuning).
 
+## Metrics
+
+`GET /metrics` — Prometheus text exposition format (`text/plain; version=0.0.4`).
+Unauthenticated, like `/health` and `/diagnostics/overview`: expose it on an internal
+interface or behind the reverse proxy, not on the open internet.
+
+| Series | Type | Labels |
+|---|---|---|
+| `tv_stretch_http_requests_total` | counter | `method`, `path`, `status` |
+| `tv_stretch_http_request_duration_seconds` | histogram | `path` |
+| `tv_stretch_build_info` | gauge | `version` |
+| `tv_stretch_ws_connections` | gauge | `type` = `device` \| `app` |
+| `tv_stretch_command_batches` | gauge | `status` = `pending` \| `completed` \| `dead_letter` |
+| `tv_stretch_nodes` | gauge | `status` = `online` \| `stale` \| `offline` \| `unknown` |
+| `tv_stretch_homes` | gauge | — |
+
+- `path` is the **route template** (`/rooms/{room_id}`), never the raw path. Labelling per
+  UUID would blow up cardinality and take the scrape down with it; unmatched requests share a
+  single `unmatched` bucket.
+- No metric carries a `home_id` label — per-home series would multiply cardinality again. Use
+  the authenticated per-home routes (`/sessions/health`, `/ota/rollout`, …) for that.
+- Counters and histograms are in-process and reset on restart. Gauges (connections, batch
+  depth, node health) are computed live at scrape time, so they are correct immediately after
+  a restart.
+- Every response also carries `X-Response-Time-Ms`.
+
+Scrape config sketch:
+
+```yaml
+scrape_configs:
+  - job_name: tv-stretch
+    static_configs:
+      - targets: ["192.168.1.10:8000"]
+```
+
 ## OTA (firmware hosting)
 
 - `GET /ota/manifest` — JSON `version` + `url` + `available` (`url: null` when no file is configured).
