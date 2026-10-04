@@ -12,6 +12,7 @@ from app.db import get_session
 from app.models import (
     EventLog,
     Home,
+    IdempotencyRecord,
     Node,
     OccupancyEvent,
     Room,
@@ -131,6 +132,10 @@ def delete_home(
     h = session.get(Home, home_id)
     if h is None:
         raise HTTPException(status_code=404, detail="home not found")
+    for rec in session.exec(
+        select(IdempotencyRecord).where(IdempotencyRecord.home_id == home_id)
+    ).all():
+        session.delete(rec)
     for sm in session.exec(select(SpatialMap).where(SpatialMap.home_id == home_id)).all():
         session.delete(sm)
     for ev in session.exec(select(EventLog).where(EventLog.home_id == home_id)).all():

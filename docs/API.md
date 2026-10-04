@@ -123,6 +123,41 @@ Set `TV_STRETCH_PUBLIC_BASE_URL` so manifest URLs are reachable from the device 
 
 - `GET /sessions/events?limit=50` — recent `EventLog` rows (handoffs, device acks, device events, `occupancy_below_threshold`). Requires `X-Control-Token`.
 
+## Idempotency keys
+
+`POST /sessions/handoff`, `/sessions/power`, `/sessions/cec-key` and `/sessions/input-select`
+accept an optional `Idempotency-Key` header (≤128 chars). A retry of the same request with the
+same key returns the **original** response — same `batch_id`, same commands — and does not
+push a second `command_batch` to the TVs or write a second event.
+
+```bash
+curl -sS -X POST http://localhost:8000/sessions/handoff \
+  -H 'Content-Type: application/json' \
+  -H "X-Control-Token: <CONTROL_TOKEN>" \
+  -H 'Idempotency-Key: 9f2c-handoff-1' \
+  -d '{"active_room_id":"<ROOM_UUID>"}'
+```
+
+Responses:
+
+| Situation | Result |
+|---|---|
+| First use of the key | Normal response, no replay header |
+| Same key, same payload, already completed | Stored response + `Idempotent-Replay: true` |
+| Same key, **different** payload | `409` `Idempotency-Key was already used for a different request payload` |
+| Same key, original request still in flight | `409` `a request with this Idempotency-Key is still in flight` |
+| Key longer than 128 chars or blank | `400` |
+
+Details:
+
+- Keys are scoped **per home**; two homes may use the same key independently.
+- The fingerprint covers the endpoint plus the body **with defaults resolved**
+  (`{"active_room_id": …, "content_ref": null, "standby_others": true}`), so `{}` and an
+  explicit `"standby_others": true` are the same request.
+- Records live for 24 h, then the key is reusable. They are stored in the `idempotencyrecord`
+  table (created automatically) and removed with the home.
+- Omitting the header keeps the previous behaviour: every call executes.
+
 ## Command batch delivery
 
 Every `command_batch` the server pushes is tracked until the connected nodes ack it.

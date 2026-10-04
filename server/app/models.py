@@ -76,3 +76,23 @@ class EventLog(SQLModel, table=True):
     kind: str = Field(index=True)
     payload_json: str = Field(sa_column=Column(Text, nullable=False))
     created_at: datetime = Field(default_factory=utcnow, index=True)
+
+
+class IdempotencyRecord(SQLModel, table=True):
+    """Replay cache for mutating session endpoints keyed by client ``Idempotency-Key``.
+
+    A completed record stores the original response so a retried request returns
+    the same ``batch_id`` instead of pushing the command batch to the TVs twice.
+    """
+
+    __table_args__ = (UniqueConstraint("home_id", "key", name="uq_idempotency_home_key"),)
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    home_id: uuid.UUID = Field(foreign_key="home.id", index=True)
+    key: str = Field(sa_column=Column(String(128), nullable=False, index=True))
+    endpoint: str = Field(sa_column=Column(String(64), nullable=False))
+    request_hash: str = Field(sa_column=Column(String(64), nullable=False))
+    status: str = Field(default="in_flight", index=True)
+    response_json: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    created_at: datetime = Field(default_factory=utcnow, index=True)
+    expires_at: datetime = Field(index=True)
