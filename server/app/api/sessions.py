@@ -4,15 +4,16 @@ import json
 import uuid
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel
 from sqlalchemy import desc
-from sqlmodel import select
+from sqlmodel import Session, select
 
 from app.models import EventLog, Node, SessionState
 from app.security.auth import AuthenticatedHome, require_home_auth
 from app.security.rate_limit import limiter
 from app.services import coordinator as coord
+from app.services import idempotency as idem
 from app.services.command_queue import (
     check_node_health,
     get_command_queue,
@@ -25,6 +26,29 @@ from app.ws.device_gateway import push_command_batch
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 logger = structlog.get_logger(__name__)
+
+
+def _claim_idempotency(
+    request: Request, auth: AuthenticatedHome, endpoint: str, body: BaseModel
+) -> tuple[str | None, idem.IdempotencyDecision]:
+    """Validate and claim the ``Idempotency-Key`` for a mutating endpoint."""
+    try:
+        key = idem.read_key(request)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    try:
+        decision = idem.begin(
+            auth.session, auth.home.id, endpoint, key, body.model_dump(mode="json")
+        )
+    except idem.IdempotencyConflict as e:
+        raise HTTPException(status_code=409, detail=e.detail) from e
+    return key, decision
+
+
+def _finish_idempotency(
+    session: Session, home_id: uuid.UUID, key: str | None, result: BaseModel
+) -> None:
+    idem.complete(session, home_id, key, result.model_dump(mode="json"))
 
 
 class HandoffBody(BaseModel):
@@ -70,9 +94,15 @@ class BatchList(BaseModel):
 @limiter.limit("10/minute")
 async def handoff(
     request: Request,
+    response: Response,
     body: HandoffBody,
     auth: AuthenticatedHome = Depends(require_home_auth),
 ) -> HandoffResult:
+    key, decision = _claim_idempotency(request, auth, "handoff", body)
+    if decision.action == "replay":
+        response.headers[idem.REPLAY_HEADER] = "true"
+        return HandoffResult(**decision.response)
+
     logger.info("handoff_request", home_id=str(auth.home.id), room_id=str(body.active_room_id))
     if not coord.ensure_room_in_home(auth.session, auth.home.id, body.active_room_id):
         logger.warning("handoff_room_not_found", room_id=str(body.active_room_id))
@@ -111,7 +141,9 @@ async def handoff(
     )
 
     logger.info("handoff_completed", batch_id=batch_id, command_count=len(cmds))
-    return HandoffResult(ok=True, batch_id=batch_id, commands=cmds)
+    result = HandoffResult(ok=True, batch_id=batch_id, commands=cmds)
+    _finish_idempotency(auth.session, auth.home.id, key, result)
+    return result
 
 
 @router.get("", response_model=SessionStateDetail | None)
@@ -247,9 +279,15 @@ class InputSelect(BaseModel):
 @limiter.limit("10/minute")
 async def power_control(
     request: Request,
+    response: Response,
     body: PowerControl,
     auth: AuthenticatedHome = Depends(require_home_auth),
 ) -> HandoffResult:
+    key, decision = _claim_idempotency(request, auth, "power", body)
+    if decision.action == "replay":
+        response.headers[idem.REPLAY_HEADER] = "true"
+        return HandoffResult(**decision.response)
+
     if not coord.ensure_room_in_home(auth.session, auth.home.id, body.room_id):
         raise HTTPException(status_code=404, detail="room not in home")
     cmd = build_power_command(body.power, body.room_id)
@@ -282,16 +320,24 @@ async def power_control(
         },
     )
 
-    return HandoffResult(ok=True, batch_id=batch_id, commands=[cmd])
+    result = HandoffResult(ok=True, batch_id=batch_id, commands=[cmd])
+    _finish_idempotency(auth.session, auth.home.id, key, result)
+    return result
 
 
 @router.post("/cec-key", response_model=HandoffResult)
 @limiter.limit("20/minute")
 async def cec_key_control(
     request: Request,
+    response: Response,
     body: CecKeyControl,
     auth: AuthenticatedHome = Depends(require_home_auth),
 ) -> HandoffResult:
+    key, decision = _claim_idempotency(request, auth, "cec-key", body)
+    if decision.action == "replay":
+        response.headers[idem.REPLAY_HEADER] = "true"
+        return HandoffResult(**decision.response)
+
     if not coord.ensure_room_in_home(auth.session, auth.home.id, body.room_id):
         raise HTTPException(status_code=404, detail="room not in home")
     cmd = build_cec_key_command(body.key, body.room_id)
@@ -324,16 +370,24 @@ async def cec_key_control(
         },
     )
 
-    return HandoffResult(ok=True, batch_id=batch_id, commands=[cmd])
+    result = HandoffResult(ok=True, batch_id=batch_id, commands=[cmd])
+    _finish_idempotency(auth.session, auth.home.id, key, result)
+    return result
 
 
 @router.post("/input-select", response_model=HandoffResult)
 @limiter.limit("10/minute")
 async def input_select_control(
     request: Request,
+    response: Response,
     body: InputSelect,
     auth: AuthenticatedHome = Depends(require_home_auth),
 ) -> HandoffResult:
+    key, decision = _claim_idempotency(request, auth, "input-select", body)
+    if decision.action == "replay":
+        response.headers[idem.REPLAY_HEADER] = "true"
+        return HandoffResult(**decision.response)
+
     if not coord.ensure_room_in_home(auth.session, auth.home.id, body.room_id):
         raise HTTPException(status_code=404, detail="room not in home")
     cmd = build_input_select(body.source, body.room_id)
@@ -366,4 +420,6 @@ async def input_select_control(
         },
     )
 
-    return HandoffResult(ok=True, batch_id=batch_id, commands=[cmd])
+    result = HandoffResult(ok=True, batch_id=batch_id, commands=[cmd])
+    _finish_idempotency(auth.session, auth.home.id, key, result)
+    return result
