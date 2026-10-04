@@ -14,6 +14,7 @@ from app.security.auth import AuthenticatedHome, require_home_auth
 from app.security.rate_limit import limiter
 from app.services import coordinator as coord
 from app.services import idempotency as idem
+from app.services import quiet_hours as qh
 from app.services.command_queue import (
     check_node_health,
     get_command_queue,
@@ -55,12 +56,19 @@ class HandoffBody(BaseModel):
     active_room_id: uuid.UUID
     content_ref: str | None = None
     standby_others: bool = True
+    #: A person explicitly asking for a TV may bypass quiet hours; sensor-driven
+    #: presence reporting may not.
+    override_quiet_hours: bool = False
 
 
 class HandoffResult(BaseModel):
     ok: bool
-    batch_id: str
-    commands: list[dict]
+    batch_id: str | None = None
+    commands: list[dict] = []
+    #: True when the handoff was deliberately not performed (e.g. quiet hours).
+    suppressed: bool = False
+    reason: str | None = None
+    minutes_remaining: int | None = None
 
 
 class SessionStateDetail(BaseModel):
@@ -107,6 +115,19 @@ async def handoff(
     if not coord.ensure_room_in_home(auth.session, auth.home.id, body.active_room_id):
         logger.warning("handoff_room_not_found", room_id=str(body.active_room_id))
         raise HTTPException(status_code=404, detail="room not in home")
+
+    if not body.override_quiet_hours:
+        quiet = qh.evaluate(auth.session, auth.home.id)
+        if quiet.suppressed:
+            qh.log_suppressed(auth.session, auth.home.id, body.active_room_id, quiet, source="api")
+            result = HandoffResult(
+                ok=False,
+                suppressed=True,
+                reason=quiet.reason,
+                minutes_remaining=quiet.minutes_remaining,
+            )
+            _finish_idempotency(auth.session, auth.home.id, key, result)
+            return result
 
     batch_id, cmds = coord.apply_handoff(
         auth.session,

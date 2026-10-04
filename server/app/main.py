@@ -17,6 +17,7 @@ from app.api import (
     nodes,
     ota_bundle,
     presence,
+    quiet_hours,
     rooms,
     sessions,
     spatial,
@@ -86,6 +87,7 @@ app.include_router(nodes.router)
 app.include_router(sessions.router)
 app.include_router(spatial.router)
 app.include_router(presence.router)
+app.include_router(quiet_hours.router)
 app.include_router(bootstrap.router)
 app.include_router(diagnostics.router)
 app.include_router(ota_bundle.router)

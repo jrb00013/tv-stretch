@@ -114,3 +114,19 @@ class RoomPolicy(SQLModel, table=True):
     input_physical_address: int | None = Field(default=None)
     standby_on_inactive: bool = Field(default=True)
     updated_at: datetime = Field(default_factory=utcnow)
+
+
+class QuietHours(SQLModel, table=True):
+    """Per-home do-not-disturb window that suppresses automatic TV handoffs.
+
+    ``start_minute`` / ``end_minute`` are minutes from midnight (0-1439, UTC) and
+    ``weekdays`` holds ISO weekday numbers (1=Monday … 7=Sunday). A window whose
+    start is greater than its end wraps past midnight.
+    """
+
+    home_id: uuid.UUID = Field(foreign_key="home.id", primary_key=True)
+    enabled: bool = Field(default=True)
+    start_minute: int = Field(default=22 * 60)
+    end_minute: int = Field(default=7 * 60)
+    weekdays: str = Field(default="1,2,3,4,5,6,7")
+    updated_at: datetime = Field(default_factory=utcnow)

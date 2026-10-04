@@ -14,6 +14,7 @@ from app.models import EventLog, OccupancyEvent, Room, SessionState, utcnow
 from app.security.auth import AuthenticatedHome, require_home_auth
 from app.security.rate_limit import limiter
 from app.services import coordinator as coord
+from app.services import quiet_hours as qh
 from app.services.mqtt import get_mqtt
 from app.ws.app_gateway import app_hub
 from app.ws.device_gateway import push_command_batch
@@ -140,6 +141,11 @@ async def report_occupancy(
 
     if not coord.ensure_room_in_home(auth.session, auth.home.id, body.room_id):
         raise HTTPException(status_code=404, detail="room not in home")
+
+    decision = qh.evaluate(auth.session, auth.home.id)
+    if decision.suppressed:
+        qh.log_suppressed(auth.session, auth.home.id, body.room_id, decision, source=body.source)
+        return OccupancyOut(ok=True, handoff=False, reason=decision.reason)
 
     st = auth.session.get(SessionState, auth.home.id)
     if st and st.active_room_id == body.room_id:
