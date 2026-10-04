@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlmodel import select
 
-from app.models import EventLog, Node, OccupancyEvent, Room
+from app.models import EventLog, Node, OccupancyEvent, Room, utcnow
 from app.security.auth import AuthenticatedHome, require_home_auth
 from app.security.rate_limit import limiter
 
@@ -151,7 +151,7 @@ def get_room_statistics(
         raise HTTPException(status_code=404, detail="room not found")
 
     nodes = list(auth.session.exec(select(Node).where(Node.room_id == room_id)).all())
-    now = datetime.now()
+    now = utcnow()
     one_day_ago = now - timedelta(days=1)
 
     occupancy_24h = list(

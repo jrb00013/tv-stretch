@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ConfigDict, Field
@@ -10,7 +10,7 @@ from sqlalchemy import desc
 from sqlmodel import select
 
 from app.config import settings
-from app.models import EventLog, OccupancyEvent, Room, SessionState
+from app.models import EventLog, OccupancyEvent, Room, SessionState, utcnow
 from app.security.auth import AuthenticatedHome, require_home_auth
 from app.security.rate_limit import limiter
 from app.services import coordinator as coord
@@ -287,7 +287,7 @@ async def cleanup_occupancy_history(
     auth: AuthenticatedHome = Depends(require_home_auth),
 ) -> None:
     """Delete occupancy events older than specified days."""
-    cutoff = datetime.now() - timedelta(days=body.days_old)
+    cutoff = utcnow() - timedelta(days=body.days_old)
     events = list(
         auth.session.exec(
             select(OccupancyEvent).where(
@@ -316,7 +316,7 @@ async def aggregate_occupancy(
     auth: AuthenticatedHome = Depends(require_home_auth),
 ) -> list[OccupancyAggregation]:
     """Get aggregated occupancy stats per room."""
-    cutoff = datetime.now() - timedelta(days=days)
+    cutoff = utcnow() - timedelta(days=days)
     rooms = list(auth.session.exec(select(Room).where(Room.home_id == auth.home.id)).all())
     results = []
     for room in rooms:

@@ -134,3 +134,27 @@ def test_delete_home_removes_spatial_maps(client: TestClient) -> None:
     h2 = client.post("/homes", json={"name": "new"})
     tok2 = h2.json()["control_token"]
     assert client.get("/spatial/maps", headers={"X-Control-Token": tok2}).json() == []
+
+
+def test_occupancy_aggregate_and_cleanup_use_tz_aware_cutoffs(client: TestClient) -> None:
+    """Regression: naive ``datetime.now()`` cutoffs break tz-aware column comparisons."""
+    h = client.post("/homes", json={"name": "agg"})
+    tok = h.json()["control_token"]
+    headers = {"X-Control-Token": tok}
+    room_id = client.post("/rooms", json={"name": "r1"}, headers=headers).json()["id"]
+
+    client.post(
+        "/presence/occupancy",
+        headers=headers,
+        json={"room_id": room_id, "confidence": 0.1, "source": "test"},
+    )
+
+    agg = client.get("/presence/occupancy/aggregate?days=7", headers=headers)
+    assert agg.status_code == 200
+    assert agg.json()[0]["event_count"] == 1
+
+    cleanup = client.request(
+        "DELETE", "/presence/occupancy/history", headers=headers, json={"days_old": 7}
+    )
+    assert cleanup.status_code == 204
+    assert client.get("/presence/occupancy/history", headers=headers).json()["total"] == 1
