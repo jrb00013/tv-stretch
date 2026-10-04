@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import Column, String, Text, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Text, UniqueConstraint
 from sqlmodel import Field, SQLModel
 
 
@@ -167,3 +167,26 @@ class FirmwareRollout(SQLModel, table=True):
     target_version: str = Field(sa_column=Column(String(32), nullable=False))
     created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime = Field(default_factory=utcnow)
+
+
+class WebhookEndpoint(SQLModel, table=True):
+    """Outbound HTTP subscription for a home.
+
+    The signing secret is returned once on create / rotate and never listed again.
+    Deliveries are signed with HMAC-SHA256 over ``timestamp.body`` so a receiver can
+    reject replays and prove the payload came from this server.
+    """
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    home_id: uuid.UUID = Field(foreign_key="home.id", index=True)
+    url: str = Field(sa_column=Column(String(512), nullable=False))
+    secret: str = Field(sa_column=Column(String(128), nullable=False))
+    #: Comma-separated event names; empty means every event.
+    events: str = Field(default="", sa_column=Column(String(256), nullable=False))
+    enabled: bool = Field(default=True)
+    created_at: datetime = Field(default_factory=utcnow)
+    last_delivery_at: datetime | None = Field(default=None)
+    last_status: int | None = Field(default=None, sa_column=Column(Integer, nullable=True))
+    last_error: str | None = Field(default=None, sa_column=Column(String(256), nullable=True))
+    failure_count: int = Field(default=0)
+    success_count: int = Field(default=0)

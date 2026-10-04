@@ -17,6 +17,7 @@ from app.services import content as content_service
 from app.services import coordinator as coord
 from app.services import idempotency as idem
 from app.services import quiet_hours as qh
+from app.services import webhooks as wh
 from app.services.command_queue import (
     check_node_health,
     get_command_queue,
@@ -135,6 +136,17 @@ async def handoff(
                 reason=quiet.reason,
                 minutes_remaining=quiet.minutes_remaining,
             )
+            wh.emit(
+                auth.session,
+                auth.home.id,
+                "handoff_suppressed",
+                {
+                    "room_id": str(body.active_room_id),
+                    "reason": quiet.reason,
+                    "minutes_remaining": quiet.minutes_remaining,
+                    "source": "api",
+                },
+            )
             _finish_idempotency(auth.session, auth.home.id, key, result)
             return result
 
@@ -170,6 +182,17 @@ async def handoff(
         },
     )
 
+    wh.emit(
+        auth.session,
+        auth.home.id,
+        "handoff",
+        {
+            "batch_id": batch_id,
+            "room_id": str(body.active_room_id),
+            "content_ref": body.content_ref,
+            "source": "api",
+        },
+    )
     logger.info("handoff_completed", batch_id=batch_id, command_count=len(cmds))
     result = HandoffResult(ok=True, batch_id=batch_id, commands=cmds)
     _finish_idempotency(auth.session, auth.home.id, key, result)
@@ -457,6 +480,12 @@ async def power_control(
     )
 
     result = HandoffResult(ok=True, batch_id=batch_id, commands=[cmd])
+    wh.emit(
+        auth.session,
+        auth.home.id,
+        "power",
+        {"batch_id": batch_id, "room_id": str(body.room_id), "power": body.power},
+    )
     _finish_idempotency(auth.session, auth.home.id, key, result)
     return result
 
@@ -507,6 +536,12 @@ async def cec_key_control(
     )
 
     result = HandoffResult(ok=True, batch_id=batch_id, commands=[cmd])
+    wh.emit(
+        auth.session,
+        auth.home.id,
+        "cec_key",
+        {"batch_id": batch_id, "room_id": str(body.room_id), "key": body.key},
+    )
     _finish_idempotency(auth.session, auth.home.id, key, result)
     return result
 
@@ -557,5 +592,11 @@ async def input_select_control(
     )
 
     result = HandoffResult(ok=True, batch_id=batch_id, commands=[cmd])
+    wh.emit(
+        auth.session,
+        auth.home.id,
+        "input_select",
+        {"batch_id": batch_id, "room_id": str(body.room_id), "source": body.source},
+    )
     _finish_idempotency(auth.session, auth.home.id, key, result)
     return result

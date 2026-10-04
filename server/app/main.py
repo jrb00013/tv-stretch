@@ -24,6 +24,7 @@ from app.api import (
     rooms,
     sessions,
     spatial,
+    webhooks,
 )
 from app.api.metrics import MetricsMiddleware
 from app.config import settings
@@ -37,6 +38,7 @@ from app.middleware.security import (
 from app.security.rate_limit import limiter
 from app.services.batch_worker import retry_loop
 from app.services.mqtt import get_mqtt
+from app.services.webhooks import webhook_worker
 from app.ws import app_gateway, device_gateway
 
 
@@ -47,12 +49,14 @@ async def lifespan(_app: FastAPI):
     mqtt = get_mqtt()
     mqtt.start()
     retry_task = asyncio.create_task(retry_loop())
+    webhook_task = asyncio.create_task(webhook_worker())
     try:
         yield
     finally:
-        retry_task.cancel()
-        with suppress(asyncio.CancelledError):
-            await retry_task
+        for task in (retry_task, webhook_task):
+            task.cancel()
+            with suppress(asyncio.CancelledError):
+                await task
         mqtt.stop()
 
 
@@ -93,6 +97,7 @@ app.include_router(nodes.router)
 app.include_router(sessions.router)
 app.include_router(spatial.router)
 app.include_router(content.router)
+app.include_router(webhooks.router)
 app.include_router(presence.router)
 app.include_router(quiet_hours.router)
 app.include_router(bootstrap.router)

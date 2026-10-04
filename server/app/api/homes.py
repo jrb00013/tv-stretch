@@ -22,6 +22,7 @@ from app.models import (
     RoomPolicy,
     SessionState,
     SpatialMap,
+    WebhookEndpoint,
     utcnow,
 )
 from app.security.auth import AuthenticatedHome, require_home_auth
@@ -147,6 +148,10 @@ def delete_home(
     rollout = session.get(FirmwareRollout, home_id)
     if rollout:
         session.delete(rollout)
+    for hook in session.exec(
+        select(WebhookEndpoint).where(WebhookEndpoint.home_id == home_id)
+    ).all():
+        session.delete(hook)
     quiet = session.get(QuietHours, home_id)
     if quiet:
         session.delete(quiet)

@@ -15,6 +15,7 @@ from app.security.auth import AuthenticatedHome, require_home_auth
 from app.security.rate_limit import limiter
 from app.services import coordinator as coord
 from app.services import quiet_hours as qh
+from app.services import webhooks as wh
 from app.services.mqtt import get_mqtt
 from app.services.presence_hysteresis import get_presence_tracker
 from app.ws.app_gateway import app_hub
@@ -101,6 +102,16 @@ async def _maybe_release(auth: AuthenticatedHome, body: OccupancyIn) -> bool:
         "standby_all",
         {"room_id": str(active_room_id), "batch_id": batch_id, "source": "presence_release"},
         home_id=auth.home.id,
+    )
+    wh.emit(
+        auth.session,
+        auth.home.id,
+        "standby_all",
+        {
+            "batch_id": batch_id,
+            "room_id": str(active_room_id),
+            "source": "presence_release",
+        },
     )
     await app_hub.broadcast_json(
         auth.home.id,
@@ -254,6 +265,17 @@ async def report_occupancy(
     await push_command_batch(auth.home.id, cmds, batch_id=batch_id)
     tracker.clear_active(auth.home.id)
 
+    wh.emit(
+        auth.session,
+        auth.home.id,
+        "handoff",
+        {
+            "batch_id": batch_id,
+            "room_id": str(body.room_id),
+            "content_ref": body.content_ref,
+            "source": f"occupancy:{body.source}",
+        },
+    )
     mqtt.publish(
         "handoff",
         {
