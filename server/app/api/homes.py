@@ -21,6 +21,7 @@ from app.models import (
 )
 from app.security.auth import AuthenticatedHome, require_home_auth
 from app.security.rate_limit import limiter
+from app.services.command_queue import get_command_queue
 
 router = APIRouter(prefix="/homes", tags=["homes"])
 
@@ -143,6 +144,7 @@ def delete_home(
         session.delete(r)
     session.delete(h)
     session.commit()
+    get_command_queue().clear_home(home_id)
 
 
 class HomeStatistics(BaseModel):

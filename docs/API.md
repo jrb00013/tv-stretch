@@ -123,6 +123,45 @@ Set `TV_STRETCH_PUBLIC_BASE_URL` so manifest URLs are reachable from the device 
 
 - `GET /sessions/events?limit=50` — recent `EventLog` rows (handoffs, device acks, device events, `occupancy_below_threshold`). Requires `X-Control-Token`.
 
+## Command batch delivery
+
+Every `command_batch` the server pushes is tracked until the connected nodes ack it.
+Batches are **not** persisted (in-memory only, lost on restart), so lifecycle
+transitions are also written to the event log as `command_batch_retry`.
+
+- `GET /sessions/batches` — in-flight, dead-lettered and recently completed batches for the home.
+- `GET /sessions/batches/{batch_id}` — one batch, or `404` when unknown / owned by another home.
+
+```json
+{
+  "batch_id": "0f0c…",
+  "status": "pending | retry | complete | failed",
+  "attempts": 1,
+  "max_attempts": 3,
+  "expected_nodes": ["6b1e…", "9f42…"],
+  "acked_nodes": ["6b1e…"],
+  "failed_nodes": [],
+  "next_attempt_at": "2026-06-09T21:10:04+00:00",
+  "last_error": null
+}
+```
+
+Semantics:
+
+- `expected_nodes` is the set of nodes connected **at push time**. A batch completes when
+  every expected node has acked; the first `ok: true` ack settles it when no node was connected.
+- A batch with unacked nodes is redelivered with exponential backoff (2s, 4s) up to
+  `max_attempts`, including batches pushed while every node was offline — a node that
+  reconnects inside the window still receives them.
+- `ok: false` acks (or an exhausted attempt budget) mark the batch `failed`; it stays readable
+  in the dead-letter store. Dead letters and completed batches are bounded (200 / 100).
+
+Device acks carry the same payload as before; `error` is optional:
+
+```json
+{"type":"ack","batch_id":"0f0c…","ok":false,"error":"cec timeout"}
+```
+
 ## Spatial maps (SLAM / floor-plan JSON)
 
 Authenticates with `X-Control-Token` (same as other home APIs).

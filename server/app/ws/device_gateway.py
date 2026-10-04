@@ -10,6 +10,7 @@ from sqlmodel import Session, select
 
 import app.db as db_module
 from app.models import EventLog, Node, utcnow
+from app.services.command_queue import CommandBatch, get_command_queue
 
 router = APIRouter()
 
@@ -35,6 +36,10 @@ class DeviceHub:
         lst = self._by_home.get(dc.home_id, [])
         if dc in lst:
             lst.remove(dc)
+
+    def connected_node_ids(self, home_id: uuid.UUID) -> list[str]:
+        """Node ids currently connected for a home (the delivery target set)."""
+        return [str(c.node_id) for c in self._by_home.get(home_id, [])]
 
     def snapshot(self) -> dict[str, Any]:
         out: dict[str, Any] = {"homes": {}}
@@ -139,6 +144,15 @@ async def ws_device(websocket: WebSocket) -> None:
                     )
                     s.commit()
             elif mtype == "ack":
+                bid = msg.get("batch_id")
+                ack_ok = msg.get("ok")
+                if isinstance(bid, str) and bid:
+                    get_command_queue().record_ack(
+                        bid,
+                        str(node_id),
+                        ok=bool(ack_ok),
+                        error=str(msg.get("error")) if msg.get("error") else None,
+                    )
                 with Session(db_module.engine) as s:
                     s.add(
                         EventLog(
@@ -147,8 +161,8 @@ async def ws_device(websocket: WebSocket) -> None:
                             payload_json=json.dumps(
                                 {
                                     "node_id": str(node_id),
-                                    "batch_id": msg.get("batch_id"),
-                                    "ok": msg.get("ok"),
+                                    "batch_id": bid,
+                                    "ok": ack_ok,
                                 }
                             ),
                         )
@@ -165,10 +179,31 @@ async def push_command_batch(
     commands: list[dict[str, Any]],
     *,
     batch_id: str | None = None,
+    track: bool = True,
 ) -> str:
+    """Broadcast a ``command_batch`` and, by default, track it for ack/retry."""
     bid = batch_id or str(uuid.uuid4())
+    if track:
+        queue = get_command_queue()
+        queue.enqueue(
+            home_id,
+            commands,
+            batch_id=bid,
+            expected_nodes=hub.connected_node_ids(home_id),
+        )
+        queue.mark_attempted(bid)
     await hub.broadcast_json(
         home_id,
         {"v": 1, "type": "command_batch", "batch_id": bid, "commands": commands},
     )
     return bid
+
+
+async def redeliver_command_batch(batch: CommandBatch) -> str:
+    """Re-send an already tracked batch without re-enqueueing it."""
+    return await push_command_batch(
+        batch.home_id,
+        batch.commands,
+        batch_id=batch.batch_id,
+        track=False,
+    )
