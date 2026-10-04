@@ -123,6 +123,38 @@ Set `TV_STRETCH_PUBLIC_BASE_URL` so manifest URLs are reachable from the device 
 
 - `GET /sessions/events?limit=50` — recent `EventLog` rows (handoffs, device acks, device events, `occupancy_below_threshold`). Requires `X-Control-Token`.
 
+## Per-room AV policy
+
+Each room can carry an AV policy applied on **every** handoff into it (e.g. a kids' room
+that always starts muted and capped, or a bedroom TV that must never take over the house).
+Requires `X-Control-Token`; all three routes are home-scoped (`404` for another home's room).
+
+- `GET /rooms/{room_id}/policy` — stored policy, or defaults with `updated_at: null`.
+- `PUT /rooms/{room_id}/policy` — create or replace. `preferred_input` requires `input_physical_address`.
+- `DELETE /rooms/{room_id}/policy` — fall back to coordinator defaults.
+
+```json
+{
+  "volume_cap": 45,
+  "mute_on_handoff": true,
+  "preferred_input": "shield-hdmi1",
+  "input_physical_address": 8192,
+  "standby_on_inactive": true
+}
+```
+
+Emitted commands (in order, before the room is switched active):
+
+| Field | Command | Notes |
+|---|---|---|
+| `preferred_input` + `input_physical_address` | `cec_set_stream_path` | Address is a CEC physical address (`0x0000`–`0xFFFF`), not a name |
+| `volume_cap` (0–100) | `cec_send_raw` → `SET_AUDIO_VOLUME` (0x41) | Mapped to 16 CEC steps, always rounding **down**, so the TV never gets louder than the cap; `0` is CEC mute |
+| `mute_on_handoff` | `cec_user_control` with key `0x41` | CEC MUTE |
+| `standby_on_inactive: false` | suppresses the `policy` standby step | Effective standby is `standby_others AND standby_on_inactive` |
+
+Only command types the node firmware dispatches are emitted. The ceiling is a starting
+point, not a limiter — someone can still turn the volume up with the remote afterwards.
+
 ## Idempotency keys
 
 `POST /sessions/handoff`, `/sessions/power`, `/sessions/cec-key` and `/sessions/input-select`
