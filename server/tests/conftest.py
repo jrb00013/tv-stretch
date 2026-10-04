@@ -11,6 +11,7 @@ from app.main import app
 from app.middleware.security import IPRateLimitMiddleware
 from app.security.rate_limit import limiter as rate_limiter
 from app.services.command_queue import reset_command_queue
+from app.services.presence_hysteresis import reset_presence_tracker
 
 
 @pytest.fixture(autouse=True)
@@ -27,6 +28,14 @@ def reset_command_batches() -> None:
     reset_command_queue()
     yield
     reset_command_queue()
+
+
+@pytest.fixture(autouse=True)
+def reset_presence_state() -> None:
+    """Drop tracked dwell/vacancy state between tests (module-level singleton)."""
+    reset_presence_tracker()
+    yield
+    reset_presence_tracker()
 
 
 @pytest.fixture(name="client")

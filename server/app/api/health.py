@@ -26,6 +26,8 @@ def ready(session: Session = Depends(get_session)) -> dict[str, str | float | di
         "status": "ready",
         "version": settings.api_version,
         "presence_handoff_min_confidence": settings.presence_handoff_min_confidence,
+        "presence_dwell_seconds": settings.presence_dwell_seconds,
+        "presence_release_seconds": settings.presence_release_seconds,
         "debug_mode": settings.debug,
         "environment": "production" if settings.is_production else "development",
     }
@@ -51,6 +53,9 @@ def verbose_health(session: Session = Depends(get_session)) -> dict:
             "max_nodes_per_home": settings.max_nodes_per_home,
             "max_rooms_per_home": settings.max_rooms_per_home,
             "presence_handoff_min_confidence": settings.presence_handoff_min_confidence,
+            "presence_dwell_seconds": settings.presence_dwell_seconds,
+            "presence_dwell_max_gap_seconds": settings.presence_dwell_max_gap_seconds,
+            "presence_release_seconds": settings.presence_release_seconds,
             "is_production": settings.is_production,
             "is_development": settings.is_development,
             "is_testing": settings.is_testing,
