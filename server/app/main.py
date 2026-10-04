@@ -11,6 +11,7 @@ from slowapi.errors import RateLimitExceeded
 
 from app.api import (
     bootstrap,
+    content,
     diagnostics,
     health,
     homes,
@@ -86,6 +87,7 @@ app.include_router(rooms.router)
 app.include_router(nodes.router)
 app.include_router(sessions.router)
 app.include_router(spatial.router)
+app.include_router(content.router)
 app.include_router(presence.router)
 app.include_router(quiet_hours.router)
 app.include_router(bootstrap.router)

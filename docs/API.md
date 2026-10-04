@@ -156,6 +156,42 @@ Retention — `DELETE /sessions/events` returns `204` and `X-Deleted-Count`:
 Rows for other homes are never touched. There is no automatic retention job yet — schedule
 the prune yourself or call it from cron.
 
+## Content library + now playing
+
+`content_ref` has always been a free-form string on a handoff. The library gives those refs
+titles, sources and play history, so "what is playing?" is answerable and the house has some
+sense of what gets watched. Requires `X-Control-Token`.
+
+| Route | Purpose |
+|---|---|
+| `POST /content` | Register an entry (`201`); duplicate `ref` in the same home → `409` |
+| `GET /content` | List, newest first; filter with `?kind=` and/or `?ref=` |
+| `GET /content/top?limit=5` | Most-played entries (never-played excluded, limit clamped 1–50) |
+| `GET /content/{content_id}` | One entry |
+| `PATCH /content/{content_id}` | Partial update, including `metadata` |
+| `DELETE /content/{content_id}` | Remove; the `ref` becomes reusable |
+| `GET /sessions/now-playing` | Active room + resolved catalogue entry |
+
+```bash
+curl -sS -X POST http://localhost:8000/content \
+  -H 'Content-Type: application/json' \
+  -H "X-Control-Token: <CONTROL_TOKEN>" \
+  -d '{"ref":"netflix:stranger-things-s4","title":"Stranger Things S4",
+       "source":"app:netflix","kind":"tv","duration_seconds":3600,
+       "metadata":{"season":4,"episode":1}}'
+```
+
+- `ref` must match `^[A-Za-z0-9][A-Za-z0-9._:-]{0,63}$` — it travels in URLs and command
+  payloads. It is unique per home, so two homes may use the same ref.
+- **Handoffs count plays.** Every handoff whose `content_ref` matches an entry increments
+  `play_count` and stamps `last_played_at`, on all three handoff paths (REST, occupancy, app
+  WebSocket). The `handoff` event payload gains `content_title`.
+- **Registration is never required.** An unregistered `content_ref` still works everywhere;
+  `now-playing` just reports `content: null` for it. Clients must not have to pre-register
+  content to move a TV.
+- `now-playing` returns `{home_id, active_room_id, content_ref, content, playing_since}`;
+  with no active room it returns `active_room_id: null`.
+
 ## Presence hysteresis (dwell + vacancy release)
 
 One above-threshold reading is not evidence that somebody settled in — SLAM noise, someone
