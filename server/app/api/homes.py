@@ -12,6 +12,7 @@ from app.db import get_session
 from app.models import (
     ContentItem,
     EventLog,
+    FirmwareRollout,
     Home,
     IdempotencyRecord,
     Node,
@@ -143,6 +144,9 @@ def delete_home(
         session.delete(pol)
     for ci in session.exec(select(ContentItem).where(ContentItem.home_id == home_id)).all():
         session.delete(ci)
+    rollout = session.get(FirmwareRollout, home_id)
+    if rollout:
+        session.delete(rollout)
     quiet = session.get(QuietHours, home_id)
     if quiet:
         session.delete(quiet)

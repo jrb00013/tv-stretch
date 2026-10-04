@@ -154,3 +154,16 @@ class ContentItem(SQLModel, table=True):
     metadata_json: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
     created_at: datetime = Field(default_factory=utcnow)
     updated_at: datetime = Field(default_factory=utcnow)
+
+
+class FirmwareRollout(SQLModel, table=True):
+    """Target firmware version for a home's nodes.
+
+    Nodes report their own ``firmware_version`` on ``hello``; this row records what
+    they *should* be running so ``GET /ota/rollout`` can report per-node status.
+    """
+
+    home_id: uuid.UUID = Field(foreign_key="home.id", primary_key=True)
+    target_version: str = Field(sa_column=Column(String(32), nullable=False))
+    created_at: datetime = Field(default_factory=utcnow)
+    updated_at: datetime = Field(default_factory=utcnow)

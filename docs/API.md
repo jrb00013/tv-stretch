@@ -114,10 +114,39 @@ Schema version field: `v` (currently `1`).
 
 ## OTA (firmware hosting)
 
-- `GET /ota/manifest` — JSON `version` + `url` (or `url: null` if no file configured).
+- `GET /ota/manifest` — JSON `version` + `url` + `available` (`url: null` when no file is configured).
 - `GET /ota/firmware.bin` — binary when `TV_STRETCH_OTA_FIRMWARE_PATH` points to a file on disk.
+- `GET /ota/rollout` — **authenticated** per-node firmware status for the home (exposes node ids).
+- `PUT /ota/rollout` — set the `target_version` every node should run (1–32 chars).
+- `DELETE /ota/rollout` — stop tracking (`404` if none).
 
 Set `TV_STRETCH_PUBLIC_BASE_URL` so manifest URLs are reachable from the device LAN (e.g. `http://192.168.1.10:8000`).
+
+Nodes report `firmware_version` in their `hello` message; the rollout compares it to the target:
+
+```json
+{
+  "target_version": "0.7.0",
+  "manifest_version": "0.7.0",
+  "manifest_matches_target": true,
+  "nodes": [{"node_id": "…", "name": "living-tv", "firmware_version": "0.6.9", "status": "behind"}],
+  "summary": {"total": 1, "converged": 0, "pending": 1, "ahead": 0, "unknown": 0}
+}
+```
+
+| `status` | Meaning |
+|---|---|
+| `up_to_date` | Reported version equals the target |
+| `behind` | Reported version sorts lower than the target |
+| `ahead` | Reported version sorts **higher** (e.g. after rolling back a target) |
+| `unknown` | No target set, the node has never reported a version, or the version has no numeric content |
+
+- Versions compare **numerically**, not as strings: `0.10.0` is newer than `0.7.0`.
+  Build metadata after `+` is ignored, so `0.9.0+build7` is still `0.9.0`.
+- `manifest_matches_target: false` means the server is not serving the version you asked to
+  roll out — nodes can never converge until `TV_STRETCH_OTA_FIRMWARE_VERSION` and the hosted
+  binary match. It is reported rather than left for someone to debug from a stuck rollout.
+- Nothing is pushed by these routes; devices pull from `/ota/manifest` on their own schedule.
 
 ## Events
 

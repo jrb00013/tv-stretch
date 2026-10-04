@@ -19,6 +19,7 @@ from app.api import (
     ota_bundle,
     presence,
     quiet_hours,
+    rollout,
     rooms,
     sessions,
     spatial,
@@ -93,6 +94,7 @@ app.include_router(quiet_hours.router)
 app.include_router(bootstrap.router)
 app.include_router(diagnostics.router)
 app.include_router(ota_bundle.router)
+app.include_router(rollout.router)
 app.include_router(device_gateway.router)
 app.include_router(app_gateway.router)
 
