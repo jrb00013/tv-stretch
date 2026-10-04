@@ -112,6 +112,68 @@ Schema version field: `v` (currently `1`).
 - `GET /health` — liveness.
 - `GET /health/ready` — DB reachability smoke check. JSON includes `version` and `presence_handoff_min_confidence` (same default as `TV_STRETCH_PRESENCE_HANDOFF_MIN_CONFIDENCE`, for UI / rig tuning).
 
+## Webhooks
+
+Push home events to your own HTTP endpoint (Home Assistant, a shell script, a cloud function).
+Requires `X-Control-Token`. Registering an endpoint requires the control token, so only the
+home owner can make the server issue outbound requests — bind that thinking to your threat
+model if you ever expose the token.
+
+| Route | Purpose |
+|---|---|
+| `POST /webhooks` | Register an endpoint → `201` with the **signing secret shown once** |
+| `GET /webhooks`, `GET /webhooks/{id}` | List / read (never includes the secret) |
+| `PATCH /webhooks/{id}` | Change `url`, `events`, `enabled` |
+| `DELETE /webhooks/{id}` | Remove |
+| `POST /webhooks/{id}/rotate-secret` | New secret; old signatures stop verifying |
+| `POST /webhooks/{id}/test` | Send a signed `test` delivery now |
+
+```bash
+curl -sS -X POST http://localhost:8000/webhooks \
+  -H 'Content-Type: application/json' -H "X-Control-Token: <CONTROL_TOKEN>" \
+  -d '{"url":"https://homeassistant.local/api/tv-stretch","events":["handoff","power"]}'
+```
+
+Events: `handoff`, `power`, `cec_key`, `input_select`, `standby_all`, `handoff_suppressed`,
+`command_batch_failed`. An **empty `events` list receives everything**. Unknown names → `422`.
+URLs must be `http`/`https` with a host.
+
+Payload:
+
+```json
+{
+  "event": "handoff",
+  "home_id": "…",
+  "sent_at": "2026-06-09T21:03:48Z",
+  "data": {"batch_id": "…", "room_id": "…", "content_ref": "netflix:show-1", "source": "api"}
+}
+```
+
+Headers: `X-TV-Stretch-Signature`, `X-TV-Stretch-Timestamp`, `X-TV-Stretch-Event`,
+`X-TV-Stretch-Delivery`.
+
+Verify with `hmac.compare_digest` over **`timestamp.body`**:
+
+```python
+expected = "sha256=" + hmac.new(secret.encode(), f"{timestamp}.{body}".encode(), hashlib.sha256).hexdigest()
+ok = hmac.compare_digest(expected, headers["X-TV-Stretch-Signature"])
+```
+
+Binding the timestamp into the signature is what makes a captured request unusable when
+replayed. Reject timestamps more than ~5 minutes old.
+
+Delivery behaviour:
+
+- **Queued, never awaited by the request.** A slow or dead receiver cannot add latency to a
+  TV handoff; a background worker drains the queue.
+- Retries: 3 attempts with exponential backoff (0.5s, 1s) on transport errors and `5xx`.
+  **A `4xx` is not retried** — the receiver rejected the request, and repeating it will not
+  help.
+- Per-endpoint `last_status`, `last_error`, `success_count`, `failure_count` and
+  `last_delivery_at` are recorded on every delivery, so a dead receiver is visible via
+  `GET /webhooks` rather than silently dropping events.
+- Uses the stdlib `urllib` (in a thread), so delivery adds no runtime dependency.
+
 ## Metrics
 
 `GET /metrics` — Prometheus text exposition format (`text/plain; version=0.0.4`).
