@@ -28,6 +28,10 @@ class AppHub:
     def __init__(self) -> None:
         self._connections: list[AppConn] = []
 
+    @property
+    def connection_count(self) -> int:
+        return len(self._connections)
+
     async def connect(self, home_id: uuid.UUID, ws: WebSocket) -> AppConn:
         conn = AppConn(websocket=ws, home_id=home_id)
         self._connections.append(conn)

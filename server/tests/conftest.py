@@ -11,6 +11,7 @@ from app.main import app
 from app.middleware.security import IPRateLimitMiddleware
 from app.security.rate_limit import limiter as rate_limiter
 from app.services.command_queue import reset_command_queue
+from app.services.metrics import reset_registry
 from app.services.presence_hysteresis import reset_presence_tracker
 
 
@@ -36,6 +37,14 @@ def reset_presence_state() -> None:
     reset_presence_tracker()
     yield
     reset_presence_tracker()
+
+
+@pytest.fixture(autouse=True)
+def reset_metrics() -> None:
+    """Drop collected series between tests (module-level singleton)."""
+    reset_registry()
+    yield
+    reset_registry()
 
 
 @pytest.fixture(name="client")

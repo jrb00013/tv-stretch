@@ -15,6 +15,7 @@ from app.api import (
     diagnostics,
     health,
     homes,
+    metrics,
     nodes,
     ota_bundle,
     presence,
@@ -24,6 +25,7 @@ from app.api import (
     sessions,
     spatial,
 )
+from app.api.metrics import MetricsMiddleware
 from app.config import settings
 from app.db import init_db
 from app.middleware.logging import LoggingMiddleware, logger
@@ -75,6 +77,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(MetricsMiddleware)
 app.add_middleware(RequestTimingMiddleware, threshold_ms=1000.0)
 app.add_middleware(IPRateLimitMiddleware, max_requests=100, window_seconds=60)
 app.add_middleware(LoggingMiddleware)
@@ -83,6 +86,7 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.include_router(health.router)
+app.include_router(metrics.router)
 app.include_router(homes.router)
 app.include_router(rooms.router)
 app.include_router(nodes.router)
