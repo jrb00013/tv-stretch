@@ -8,6 +8,7 @@ import structlog
 from sqlmodel import Session
 
 from app.models import EventLog, Room, RoomPolicy, SessionState, utcnow
+from app.services import content as content_service
 
 logger = structlog.get_logger(__name__)
 
@@ -191,11 +192,14 @@ def apply_handoff(
         st.updated_at = utcnow()
         session.add(st)
 
+    played = content_service.record_play(session, home_id, content_ref)
+
     payload = {
         "active_room_id": str(active_room_id),
         "content_ref": content_ref,
         "source": source,
         "batch_id": batch_id,
+        "content_title": played.title if played else None,
     }
     session.add(
         EventLog(

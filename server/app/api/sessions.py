@@ -13,6 +13,7 @@ from sqlmodel import Session, select
 from app.models import EventLog, Node, SessionState, utcnow
 from app.security.auth import AuthenticatedHome, require_home_auth
 from app.security.rate_limit import limiter
+from app.services import content as content_service
 from app.services import coordinator as coord
 from app.services import idempotency as idem
 from app.services import quiet_hours as qh
@@ -323,6 +324,49 @@ def node_health(
     if not node or node.home_id != auth.home.id:
         raise HTTPException(status_code=404, detail="node not found")
     return check_node_health(auth.session, node_id)
+
+
+class NowPlaying(BaseModel):
+    """What the house is currently pointed at, resolved against the catalogue."""
+
+    home_id: uuid.UUID
+    active_room_id: uuid.UUID | None = None
+    content_ref: str | None = None
+    content: dict | None = None
+    playing_since: str | None = None
+
+
+@router.get("/now-playing", response_model=NowPlaying)
+def now_playing(
+    auth: AuthenticatedHome = Depends(require_home_auth),
+) -> NowPlaying:
+    """Current session plus the catalogue entry for its ``content_ref`` (if known)."""
+    st = auth.session.get(SessionState, auth.home.id)
+    if st is None or st.active_room_id is None:
+        return NowPlaying(home_id=auth.home.id)
+    item = (
+        content_service.find_by_ref(auth.session, auth.home.id, st.content_ref)
+        if st.content_ref
+        else None
+    )
+    return NowPlaying(
+        home_id=auth.home.id,
+        active_room_id=st.active_room_id,
+        content_ref=st.content_ref,
+        content=(
+            {
+                "id": str(item.id),
+                "ref": item.ref,
+                "title": item.title,
+                "source": item.source,
+                "kind": item.kind,
+                "duration_seconds": item.duration_seconds,
+            }
+            if item
+            else None
+        ),
+        playing_since=st.updated_at.isoformat(),
+    )
 
 
 @router.get("/batches", response_model=BatchList)

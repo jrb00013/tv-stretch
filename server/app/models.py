@@ -130,3 +130,27 @@ class QuietHours(SQLModel, table=True):
     end_minute: int = Field(default=7 * 60)
     weekdays: str = Field(default="1,2,3,4,5,6,7")
     updated_at: datetime = Field(default_factory=utcnow)
+
+
+class ContentItem(SQLModel, table=True):
+    """Catalogue entry backing the free-form ``content_ref`` used by handoffs.
+
+    ``ref`` is the stable key a client already sends (unique per home); the extra
+    columns are what the coordinator needs to answer "what is playing?".
+    """
+
+    __table_args__ = (UniqueConstraint("home_id", "ref", name="uq_content_home_ref"),)
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    home_id: uuid.UUID = Field(foreign_key="home.id", index=True)
+    ref: str = Field(sa_column=Column(String(64), nullable=False, index=True))
+    title: str = Field(sa_column=Column(String(200), nullable=False))
+    #: Where it plays: ``app:<name>``, ``hdmi:<label>``, ``cast:<device>``, …
+    source: str = Field(default="app:unknown", sa_column=Column(String(64), nullable=False))
+    kind: str = Field(default="unknown", index=True)
+    duration_seconds: int | None = Field(default=None)
+    play_count: int = Field(default=0)
+    last_played_at: datetime | None = Field(default=None)
+    metadata_json: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    created_at: datetime = Field(default_factory=utcnow)
+    updated_at: datetime = Field(default_factory=utcnow)

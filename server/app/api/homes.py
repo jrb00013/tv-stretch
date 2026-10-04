@@ -10,6 +10,7 @@ from sqlmodel import Session, select
 
 from app.db import get_session
 from app.models import (
+    ContentItem,
     EventLog,
     Home,
     IdempotencyRecord,
@@ -140,6 +141,8 @@ def delete_home(
         session.delete(rec)
     for pol in session.exec(select(RoomPolicy).where(RoomPolicy.home_id == home_id)).all():
         session.delete(pol)
+    for ci in session.exec(select(ContentItem).where(ContentItem.home_id == home_id)).all():
+        session.delete(ci)
     quiet = session.get(QuietHours, home_id)
     if quiet:
         session.delete(quiet)
