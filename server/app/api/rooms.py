@@ -4,10 +4,10 @@ import uuid
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 from sqlmodel import select
 
-from app.models import EventLog, Node, OccupancyEvent, Room, utcnow
+from app.models import EventLog, Node, OccupancyEvent, Room, RoomPolicy, utcnow
 from app.security.auth import AuthenticatedHome, require_home_auth
 from app.security.rate_limit import limiter
 
@@ -90,6 +90,111 @@ def list_rooms(
     return [RoomRead(id=r.id, home_id=r.home_id, name=r.name) for r in rows]
 
 
+class RoomPolicyBody(BaseModel):
+    """Per-room AV policy applied on every handoff into this room."""
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "volume_cap": 45,
+                "mute_on_handoff": True,
+                "preferred_input": "shield-hdmi1",
+                "input_physical_address": 8192,
+                "standby_on_inactive": True,
+            }
+        }
+    )
+
+    volume_cap: int | None = Field(default=None, ge=0, le=100)
+    mute_on_handoff: bool = False
+    preferred_input: str | None = Field(default=None, max_length=64)
+    input_physical_address: int | None = Field(default=None, ge=0, le=0xFFFF)
+    standby_on_inactive: bool = True
+
+
+class RoomPolicyRead(RoomPolicyBody):
+    room_id: uuid.UUID
+    #: ``null`` until a policy has ever been written for the room.
+    updated_at: str | None = None
+
+
+def _policy_to_read(p: RoomPolicy) -> RoomPolicyRead:
+    return RoomPolicyRead(
+        room_id=p.room_id,
+        volume_cap=p.volume_cap,
+        mute_on_handoff=p.mute_on_handoff,
+        preferred_input=p.preferred_input,
+        input_physical_address=p.input_physical_address,
+        standby_on_inactive=p.standby_on_inactive,
+        updated_at=p.updated_at.isoformat(),
+    )
+
+
+def _require_room(auth: AuthenticatedHome, room_id: uuid.UUID) -> Room:
+    r = auth.session.get(Room, room_id)
+    if r is None or r.home_id != auth.home.id:
+        raise HTTPException(status_code=404, detail="room not found")
+    return r
+
+
+@router.get("/{room_id}/policy", response_model=RoomPolicyRead)
+def get_room_policy(
+    room_id: uuid.UUID,
+    auth: AuthenticatedHome = Depends(require_home_auth),
+) -> RoomPolicyRead:
+    """Stored policy for a room, or defaults when the room has no policy yet."""
+    _require_room(auth, room_id)
+    policy = auth.session.get(RoomPolicy, room_id)
+    if policy is None:
+        return RoomPolicyRead(room_id=room_id)
+    return _policy_to_read(policy)
+
+
+@router.put("/{room_id}/policy", response_model=RoomPolicyRead)
+@limiter.limit("20/minute")
+def put_room_policy(
+    request: Request,
+    room_id: uuid.UUID,
+    body: RoomPolicyBody,
+    auth: AuthenticatedHome = Depends(require_home_auth),
+) -> RoomPolicyRead:
+    """Create or replace the AV policy for a room."""
+    _require_room(auth, room_id)
+    if body.preferred_input and body.input_physical_address is None:
+        raise HTTPException(
+            status_code=422,
+            detail="input_physical_address is required when preferred_input is set",
+        )
+    policy = auth.session.get(RoomPolicy, room_id)
+    if policy is None:
+        policy = RoomPolicy(room_id=room_id, home_id=auth.home.id)
+    policy.volume_cap = body.volume_cap
+    policy.mute_on_handoff = body.mute_on_handoff
+    policy.preferred_input = body.preferred_input
+    policy.input_physical_address = body.input_physical_address
+    policy.standby_on_inactive = body.standby_on_inactive
+    policy.updated_at = utcnow()
+    auth.session.add(policy)
+    auth.session.commit()
+    auth.session.refresh(policy)
+    return _policy_to_read(policy)
+
+
+@router.delete("/{room_id}/policy", status_code=204)
+@limiter.limit("20/minute")
+def delete_room_policy(
+    request: Request,
+    room_id: uuid.UUID,
+    auth: AuthenticatedHome = Depends(require_home_auth),
+) -> None:
+    """Remove a room policy so the room falls back to coordinator defaults."""
+    _require_room(auth, room_id)
+    policy = auth.session.get(RoomPolicy, room_id)
+    if policy is not None:
+        auth.session.delete(policy)
+        auth.session.commit()
+
+
 @router.get("/{room_id}", response_model=RoomRead)
 def get_room(
     room_id: uuid.UUID,
@@ -128,6 +233,9 @@ def delete_room(
     n = auth.session.exec(select(Node).where(Node.room_id == room_id)).first()
     if n:
         raise HTTPException(status_code=409, detail="room has nodes; delete nodes first")
+    policy = auth.session.get(RoomPolicy, room_id)
+    if policy is not None:
+        auth.session.delete(policy)
     auth.session.delete(r)
     auth.session.commit()
 

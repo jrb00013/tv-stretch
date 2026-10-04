@@ -96,3 +96,21 @@ class IdempotencyRecord(SQLModel, table=True):
     response_json: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
     created_at: datetime = Field(default_factory=utcnow, index=True)
     expires_at: datetime = Field(index=True)
+
+
+class RoomPolicy(SQLModel, table=True):
+    """Per-room AV policy applied on every handoff into that room.
+
+    Optional: a room with no row uses the coordinator defaults. ``volume_cap`` is a
+    0-100 ceiling applied as an absolute CEC ``SET_AUDIO_VOLUME``; ``mute_on_handoff``
+    sends CEC ``MUTE`` (user control 0x41) so the room starts silent.
+    """
+
+    room_id: uuid.UUID = Field(foreign_key="room.id", primary_key=True)
+    home_id: uuid.UUID = Field(foreign_key="home.id", index=True)
+    volume_cap: int | None = Field(default=None)
+    mute_on_handoff: bool = Field(default=False)
+    preferred_input: str | None = Field(default=None, sa_column=Column(String(64), nullable=True))
+    input_physical_address: int | None = Field(default=None)
+    standby_on_inactive: bool = Field(default=True)
+    updated_at: datetime = Field(default_factory=utcnow)
