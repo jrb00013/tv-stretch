@@ -123,6 +123,41 @@ Set `TV_STRETCH_PUBLIC_BASE_URL` so manifest URLs are reachable from the device 
 
 - `GET /sessions/events?limit=50` — recent `EventLog` rows (handoffs, device acks, device events, `occupancy_below_threshold`). Requires `X-Control-Token`.
 
+## Quiet hours (do-not-disturb)
+
+A per-home window that suppresses **automatic** TV handoffs — nobody wants the living-room TV
+waking up because a presence sensor noticed movement at 03:00. Requires `X-Control-Token`.
+
+- `GET /quiet-hours` — the stored window plus `active_now`, `minutes_remaining`, `next_transition`.
+- `PUT /quiet-hours` — create or replace. `start_minute`/`end_minute` are minutes from midnight
+  **UTC** (0–1439) and must differ; `weekdays` is ISO weekday numbers (`1`=Mon … `7`=Sun).
+- `DELETE /quiet-hours` — remove the window.
+
+```json
+{"enabled": true, "start_minute": 1320, "end_minute": 420, "weekdays": "1,2,3,4,5,6,7"}
+```
+
+Behaviour:
+
+| Path | During the window |
+|---|---|
+| `POST /sessions/handoff` | `200` with `ok: false`, `suppressed: true`, `reason: "quiet_hours"`, `batch_id: null`, no commands pushed |
+| `POST /presence/occupancy` | Reading is still stored; `handoff: false`, `reason: "quiet_hours"` |
+| `/ws/app` `presence` | Reply `{"v":1,"type":"handoff_suppressed","reason":"quiet_hours","minutes_remaining":N}` |
+
+- **Override**: send `"override_quiet_hours": true` on the REST handoff (or `override_quiet_hours`
+  in the app WebSocket message) when a *person* explicitly asks for a TV. Sensor-driven presence
+  cannot override — it has no field for it.
+- Every suppression writes a `handoff_suppressed` event with the room, source and minutes
+  remaining, so "why didn't the TV turn on?" is answerable from `/sessions/events`.
+- Suppressed handoffs still consume an `Idempotency-Key` and replay the suppression, not a
+  later success.
+- **Weekday semantics for windows that wrap midnight**: the list applies to the day the window
+  *starts*, so `"weekdays": "1,2,3,4,5"` with `22:00→07:00` means quiet Monday through Friday
+  night, waking up Saturday morning — not quiet again on Saturday night.
+- Times are UTC. There is no per-home timezone yet; if you need local quiet hours, convert
+  before writing the window.
+
 ## Per-room AV policy
 
 Each room can carry an AV policy applied on **every** handoff into it (e.g. a kids' room

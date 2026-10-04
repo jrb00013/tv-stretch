@@ -11,6 +11,7 @@ from sqlmodel import Session, select
 import app.db as db_module
 from app.models import Home, Node, Room, SessionState
 from app.services import coordinator as coord
+from app.services import quiet_hours as qh
 from app.ws.device_gateway import push_command_batch
 
 router = APIRouter()
@@ -125,17 +126,37 @@ async def ws_app(websocket: WebSocket) -> None:
                 cref_s = str(cref) if cref is not None else None
                 standby = msg.get("standby_others")
                 standby_b = True if standby is None else bool(standby)
+                override = bool(msg.get("override_quiet_hours"))
                 with Session(db_module.engine) as session:
                     if not coord.ensure_room_in_home(session, home_id, room_id):
                         continue
-                    batch_id, cmds = coord.apply_handoff(
-                        session,
-                        home_id,
-                        room_id,
-                        content_ref=cref_s,
-                        source="app_ws",
-                        standby_others=standby_b,
+                    quiet = None if override else qh.evaluate(session, home_id)
+                    if quiet is not None and quiet.suppressed:
+                        qh.log_suppressed(session, home_id, room_id, quiet, source="app_ws")
+                        suppressed = quiet
+                    else:
+                        suppressed = None
+                        batch_id, cmds = coord.apply_handoff(
+                            session,
+                            home_id,
+                            room_id,
+                            content_ref=cref_s,
+                            source="app_ws",
+                            standby_others=standby_b,
+                        )
+                if suppressed is not None:
+                    await websocket.send_text(
+                        json.dumps(
+                            {
+                                "v": 1,
+                                "type": "handoff_suppressed",
+                                "reason": suppressed.reason,
+                                "minutes_remaining": suppressed.minutes_remaining,
+                                "room_id": str(room_id),
+                            }
+                        )
                     )
+                    continue
                 await push_command_batch(home_id, cmds, batch_id=batch_id)
                 await websocket.send_text(
                     json.dumps({"v": 1, "type": "handoff_applied", "batch_id": batch_id})

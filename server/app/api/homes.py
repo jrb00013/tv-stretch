@@ -15,6 +15,7 @@ from app.models import (
     IdempotencyRecord,
     Node,
     OccupancyEvent,
+    QuietHours,
     Room,
     RoomPolicy,
     SessionState,
@@ -139,6 +140,9 @@ def delete_home(
         session.delete(rec)
     for pol in session.exec(select(RoomPolicy).where(RoomPolicy.home_id == home_id)).all():
         session.delete(pol)
+    quiet = session.get(QuietHours, home_id)
+    if quiet:
+        session.delete(quiet)
     for sm in session.exec(select(SpatialMap).where(SpatialMap.home_id == home_id)).all():
         session.delete(sm)
     for ev in session.exec(select(EventLog).where(EventLog.home_id == home_id)).all():
