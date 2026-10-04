@@ -1,4 +1,5 @@
-from contextlib import asynccontextmanager
+import asyncio
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -29,6 +30,7 @@ from app.middleware.security import (
     SecurityHeadersMiddleware,
 )
 from app.security.rate_limit import limiter
+from app.services.batch_worker import retry_loop
 from app.services.mqtt import get_mqtt
 from app.ws import app_gateway, device_gateway
 
@@ -39,8 +41,14 @@ async def lifespan(_app: FastAPI):
     logger.info("database_initialized")
     mqtt = get_mqtt()
     mqtt.start()
-    yield
-    mqtt.stop()
+    retry_task = asyncio.create_task(retry_loop())
+    try:
+        yield
+    finally:
+        retry_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await retry_task
+        mqtt.stop()
 
 
 app = FastAPI(

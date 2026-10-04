@@ -10,6 +10,7 @@ from app.db import get_session
 from app.main import app
 from app.middleware.security import IPRateLimitMiddleware
 from app.security.rate_limit import limiter as rate_limiter
+from app.services.command_queue import reset_command_queue
 
 
 @pytest.fixture(autouse=True)
@@ -18,6 +19,14 @@ def reset_rate_limits() -> None:
     rate_limiter.reset()
     IPRateLimitMiddleware.reset()
     yield
+
+
+@pytest.fixture(autouse=True)
+def reset_command_batches() -> None:
+    """Drop tracked command batches between tests (module-level singleton)."""
+    reset_command_queue()
+    yield
+    reset_command_queue()
 
 
 @pytest.fixture(name="client")

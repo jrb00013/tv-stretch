@@ -13,7 +13,11 @@ from app.models import EventLog, Node, SessionState
 from app.security.auth import AuthenticatedHome, require_home_auth
 from app.security.rate_limit import limiter
 from app.services import coordinator as coord
-from app.services.command_queue import check_node_health, get_home_node_health
+from app.services.command_queue import (
+    check_node_health,
+    get_command_queue,
+    get_home_node_health,
+)
 from app.services.coordinator import build_cec_key_command, build_input_select, build_power_command
 from app.services.mqtt import get_mqtt
 from app.ws.app_gateway import app_hub
@@ -54,6 +58,11 @@ class SessionStateDetail(BaseModel):
 class HomeHealth(BaseModel):
     home_id: uuid.UUID
     nodes: list[dict]
+    summary: dict
+
+
+class BatchList(BaseModel):
+    batches: list[dict]
     summary: dict
 
 
@@ -190,6 +199,33 @@ def node_health(
     if not node or node.home_id != auth.home.id:
         raise HTTPException(status_code=404, detail="node not found")
     return check_node_health(auth.session, node_id)
+
+
+@router.get("/batches", response_model=BatchList)
+def list_command_batches(
+    auth: AuthenticatedHome = Depends(require_home_auth),
+) -> BatchList:
+    """In-flight and dead-lettered ``command_batch`` deliveries for this home."""
+    queue = get_command_queue()
+    batches = sorted(
+        queue.get_pending_for_home(auth.home.id)
+        + queue.get_dead_letters_for_home(auth.home.id)
+        + queue.get_completed_for_home(auth.home.id),
+        key=lambda b: b.created_at,
+        reverse=True,
+    )
+    return BatchList(batches=[b.to_dict() for b in batches], summary=queue.stats())
+
+
+@router.get("/batches/{batch_id}", response_model=dict)
+def get_command_batch(
+    batch_id: str,
+    auth: AuthenticatedHome = Depends(require_home_auth),
+) -> dict:
+    batch = get_command_queue().get(batch_id)
+    if batch is None or batch.home_id != auth.home.id:
+        raise HTTPException(status_code=404, detail="batch not found")
+    return batch.to_dict()
 
 
 class PowerControl(BaseModel):
