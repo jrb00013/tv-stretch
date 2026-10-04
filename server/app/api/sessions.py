@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from datetime import UTC, datetime, timedelta
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
@@ -9,7 +10,7 @@ from pydantic import BaseModel
 from sqlalchemy import desc
 from sqlmodel import Session, select
 
-from app.models import EventLog, Node, SessionState
+from app.models import EventLog, Node, SessionState, utcnow
 from app.security.auth import AuthenticatedHome, require_home_auth
 from app.security.rate_limit import limiter
 from app.services import coordinator as coord
@@ -27,6 +28,13 @@ from app.ws.device_gateway import push_command_batch
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 logger = structlog.get_logger(__name__)
+
+
+def _as_utc(value: datetime | None) -> datetime | None:
+    """Read naive timestamps as UTC so filters compare against aware columns."""
+    if value is None:
+        return None
+    return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
 
 
 def _claim_idempotency(
@@ -192,15 +200,46 @@ def get_session_by_room(
 
 @router.get("/events", response_model=list[dict])
 def list_events(
+    request: Request,
+    response: Response,
     limit: int = Query(50, ge=1, le=500),
     kind: str | None = Query(None, description="Filter by event kind"),
+    since: datetime | None = Query(None, description="Only events at or after this ISO-8601 time"),
+    until: datetime | None = Query(None, description="Only events before this ISO-8601 time"),
+    cursor: datetime | None = Query(
+        None, description="Keyset cursor: continue strictly before this event time"
+    ),
     auth: AuthenticatedHome = Depends(require_home_auth),
 ) -> list[dict]:
+    """Recent events, newest first.
+
+    Pagination is keyset-based to stay stable while new events arrive: pass the
+    ``X-Next-Cursor`` header back as ``cursor`` to walk further back. Times without a
+    timezone are read as UTC.
+    """
     stmt = select(EventLog).where(EventLog.home_id == auth.home.id)
     if kind:
         stmt = stmt.where(EventLog.kind == kind)
+    since_utc = _as_utc(since)
+    until_utc = _as_utc(until)
+    cursor_utc = _as_utc(cursor)
+    if since_utc and until_utc and since_utc > until_utc:
+        raise HTTPException(status_code=422, detail="since must not be after until")
+    if since_utc:
+        stmt = stmt.where(EventLog.created_at >= since_utc)
+    if until_utc:
+        stmt = stmt.where(EventLog.created_at < until_utc)
+    if cursor_utc:
+        stmt = stmt.where(EventLog.created_at < cursor_utc)
+
     stmt = stmt.order_by(desc(EventLog.created_at)).limit(limit)
     rows = list(auth.session.exec(stmt).all())
+    if rows and len(rows) == limit:
+        # "Z" instead of "+00:00": a raw "+" decodes to a space in a query string, which
+        # would make the cursor unusable when copied straight from the header.
+        response.headers["X-Next-Cursor"] = _as_utc(rows[-1].created_at).strftime(
+            "%Y-%m-%dT%H:%M:%S.%fZ"
+        )
     return [
         {
             "id": str(r.id),
@@ -222,13 +261,45 @@ def list_event_kinds(
 
 
 @router.delete("/events", status_code=204)
+@limiter.limit("10/minute")
 def clear_events(
+    request: Request,
+    response: Response,
+    older_than_seconds: int | None = Query(
+        None, ge=1, description="Delete only events older than this many seconds"
+    ),
+    before: datetime | None = Query(
+        None, description="Delete only events before this ISO-8601 time"
+    ),
     auth: AuthenticatedHome = Depends(require_home_auth),
 ) -> None:
-    rows = list(auth.session.exec(select(EventLog).where(EventLog.home_id == auth.home.id)).all())
+    """Delete events.
+
+    With no arguments this clears the whole log (previous behaviour). Pass
+    ``older_than_seconds`` or ``before`` to prune instead; the number of deleted
+    rows comes back in the ``X-Deleted-Count`` header.
+    """
+    stmt = select(EventLog).where(EventLog.home_id == auth.home.id)
+    cutoff = _as_utc(before)
+    if older_than_seconds is not None:
+        age_cutoff = utcnow() - timedelta(seconds=older_than_seconds)
+        cutoff = age_cutoff if cutoff is None else min(cutoff, age_cutoff)
+    if cutoff is not None:
+        stmt = stmt.where(EventLog.created_at < cutoff)
+    else:
+        logger.info("event_log_cleared", home_id=str(auth.home.id))
+
+    rows = list(auth.session.exec(stmt).all())
     for r in rows:
         auth.session.delete(r)
     auth.session.commit()
+    response.headers["X-Deleted-Count"] = str(len(rows))
+    logger.info(
+        "event_log_pruned",
+        home_id=str(auth.home.id),
+        deleted=len(rows),
+        cutoff=cutoff.isoformat() if cutoff else None,
+    )
 
 
 @router.get("/health", response_model=HomeHealth)

@@ -121,7 +121,40 @@ Set `TV_STRETCH_PUBLIC_BASE_URL` so manifest URLs are reachable from the device 
 
 ## Events
 
-- `GET /sessions/events?limit=50` — recent `EventLog` rows (handoffs, device acks, device events, `occupancy_below_threshold`). Requires `X-Control-Token`.
+`GET /sessions/events` returns recent `EventLog` rows (handoffs, device acks, device events,
+`occupancy_below_threshold`, `handoff_suppressed`, `standby_all`, …). Requires `X-Control-Token`.
+
+| Param | Meaning |
+|---|---|
+| `limit` | 1–500, default 50 |
+| `kind` | Exact event kind (see `GET /sessions/events/kinds`) |
+| `since` | ISO-8601; only events at or after this instant |
+| `until` | ISO-8601; only events strictly before this instant |
+| `cursor` | Keyset cursor from `X-Next-Cursor`; continues strictly before that event |
+
+```bash
+curl -sS "http://localhost:8000/sessions/events?kind=handoff&since=2026-06-09T00:00:00Z&limit=100" \
+  -H "X-Control-Token: <CONTROL_TOKEN>"
+```
+
+- Timestamps **without** a timezone are read as UTC. Prefer the `Z` form — a raw `+00:00` in a
+  query string decodes to a space.
+- Pagination is keyset-based, so walking with `cursor` stays stable while new events arrive.
+  `X-Next-Cursor` is only present when a full page was returned, and is emitted as
+  `…Z` so it can be pasted straight into `?cursor=`.
+- `since` after `until` → `422`.
+
+Retention — `DELETE /sessions/events` returns `204` and `X-Deleted-Count`:
+
+| Call | Effect |
+|---|---|
+| `DELETE /sessions/events` | Clear the whole log (previous behaviour) |
+| `DELETE /sessions/events?older_than_seconds=3600` | Prune rows older than an age |
+| `DELETE /sessions/events?before=<ISO-8601>` | Prune rows before an instant |
+| both | The **stricter** (older) cutoff wins |
+
+Rows for other homes are never touched. There is no automatic retention job yet — schedule
+the prune yourself or call it from cron.
 
 ## Presence hysteresis (dwell + vacancy release)
 
