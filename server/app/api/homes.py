@@ -2,14 +2,23 @@ from __future__ import annotations
 
 import secrets
 import uuid
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlmodel import Session, select
 
 from app.db import get_session
-from app.models import EventLog, Home, Node, OccupancyEvent, Room, SessionState, SpatialMap
+from app.models import (
+    EventLog,
+    Home,
+    Node,
+    OccupancyEvent,
+    Room,
+    SessionState,
+    SpatialMap,
+    utcnow,
+)
 from app.security.auth import AuthenticatedHome, require_home_auth
 from app.security.rate_limit import limiter
 
@@ -174,7 +183,7 @@ def get_home_statistics(
     rooms = list(session.exec(select(Room).where(Room.home_id == home_id)).all())
     nodes = list(session.exec(select(Node).where(Node.home_id == home_id)).all())
 
-    now = datetime.now()
+    now = utcnow()
     one_day_ago = now - timedelta(days=1)
 
     events_24h = list(
