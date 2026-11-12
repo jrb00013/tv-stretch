@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta
 
 import structlog
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from sqlalchemy import desc
 from sqlmodel import Session, select
 
-from app.models import EventLog, Node, SessionState, utcnow
+from app.models import EventLog, Node, SessionState, as_utc, isoformat_utc, utcnow
 from app.security.auth import AuthenticatedHome, require_home_auth
 from app.security.rate_limit import limiter
 from app.services import content as content_service
@@ -34,9 +34,7 @@ logger = structlog.get_logger(__name__)
 
 def _as_utc(value: datetime | None) -> datetime | None:
     """Read naive timestamps as UTC so filters compare against aware columns."""
-    if value is None:
-        return None
-    return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+    return as_utc(value)
 
 
 def _claim_idempotency(
@@ -269,7 +267,7 @@ def list_events(
             "id": str(r.id),
             "kind": r.kind,
             "payload": r.payload_json,
-            "created_at": r.created_at.isoformat(),
+            "created_at": isoformat_utc(r.created_at),
         }
         for r in rows
     ]

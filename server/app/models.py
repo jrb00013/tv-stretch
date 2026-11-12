@@ -11,6 +11,20 @@ def utcnow() -> datetime:
     return datetime.now(UTC)
 
 
+def as_utc(value: datetime | None) -> datetime | None:
+    """Treat naive datetimes (e.g. SQLite round-trips) as UTC."""
+    if value is None:
+        return None
+    return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+
+
+def isoformat_utc(value: datetime) -> str:
+    """Serialize a datetime with an explicit UTC offset for API clients."""
+    aware = as_utc(value)
+    assert aware is not None
+    return aware.isoformat()
+
+
 class Home(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     name: str = Field(index=True)
