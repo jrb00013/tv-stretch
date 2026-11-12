@@ -20,6 +20,7 @@ from app.models import (
     QuietHours,
     Room,
     RoomPolicy,
+    ScenePreset,
     SessionState,
     SpatialMap,
     WebhookEndpoint,
@@ -33,6 +34,10 @@ router = APIRouter(prefix="/homes", tags=["homes"])
 
 
 class HomeCreate(BaseModel):
+    name: str
+
+
+class HomeUpdate(BaseModel):
     name: str
 
 
@@ -78,11 +83,9 @@ def create_home(
 @router.get("", response_model=list[HomeSummary])
 def list_homes(
     auth: AuthenticatedHome = Depends(require_home_auth),
-    session: Session = Depends(get_session),
 ) -> list[HomeSummary]:
-    """List all homes accessible with current token."""
-    homes = list(session.exec(select(Home)).all())
-    return [HomeSummary(id=h.id, name=h.name) for h in homes]
+    """List homes accessible with the current token (only the authenticated home)."""
+    return [HomeSummary(id=auth.home.id, name=auth.home.name)]
 
 
 @router.get("/me", response_model=HomeDetail)
@@ -100,10 +103,30 @@ def get_current_home(
 
 
 @router.get("/{home_id}", response_model=HomeSummary)
-def get_home(home_id: uuid.UUID, session: Session = Depends(get_session)) -> HomeSummary:
-    h = session.get(Home, home_id)
+def get_home(
+    home_id: uuid.UUID,
+    auth: AuthenticatedHome = Depends(require_home_auth),
+) -> HomeSummary:
+    if auth.home.id != home_id:
+        raise HTTPException(status_code=404, detail="home not found")
+    return HomeSummary(id=auth.home.id, name=auth.home.name)
+
+
+@router.patch("/{home_id}", response_model=HomeSummary)
+def update_home(
+    home_id: uuid.UUID,
+    body: HomeUpdate,
+    auth: AuthenticatedHome = Depends(require_home_auth),
+) -> HomeSummary:
+    if auth.home.id != home_id:
+        raise HTTPException(status_code=404, detail="home not found")
+    h = auth.session.get(Home, home_id)
     if h is None:
         raise HTTPException(status_code=404, detail="home not found")
+    h.name = body.name
+    auth.session.add(h)
+    auth.session.commit()
+    auth.session.refresh(h)
     return HomeSummary(id=h.id, name=h.name)
 
 
@@ -155,6 +178,10 @@ def delete_home(
     quiet = session.get(QuietHours, home_id)
     if quiet:
         session.delete(quiet)
+    for occ in session.exec(select(OccupancyEvent).where(OccupancyEvent.home_id == home_id)).all():
+        session.delete(occ)
+    for sc in session.exec(select(ScenePreset).where(ScenePreset.home_id == home_id)).all():
+        session.delete(sc)
     for sm in session.exec(select(SpatialMap).where(SpatialMap.home_id == home_id)).all():
         session.delete(sm)
     for ev in session.exec(select(EventLog).where(EventLog.home_id == home_id)).all():
