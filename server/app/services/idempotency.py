@@ -10,7 +10,7 @@ from typing import Any
 import structlog
 from sqlmodel import Session, select
 
-from app.models import IdempotencyRecord, utcnow
+from app.models import IdempotencyRecord, as_utc, utcnow
 
 logger = structlog.get_logger(__name__)
 
@@ -90,7 +90,7 @@ def begin(
         )
     ).first()
 
-    if record is not None and record.expires_at <= utcnow():
+    if record is not None and as_utc(record.expires_at) <= utcnow():
         session.delete(record)
         session.commit()
         record = None
@@ -142,10 +142,16 @@ def complete(
 
 def purge_expired(session: Session, home_id: uuid.UUID | None = None) -> int:
     """Delete expired records. Returns how many were removed."""
-    stmt = select(IdempotencyRecord).where(IdempotencyRecord.expires_at <= utcnow())
+    # Compare in Python after as_utc — SQLite drops tzinfo on round-trip.
+    stmt = select(IdempotencyRecord)
     if home_id is not None:
         stmt = stmt.where(IdempotencyRecord.home_id == home_id)
-    rows = list(session.exec(stmt).all())
+    now = utcnow()
+    rows = [
+        r
+        for r in session.exec(stmt).all()
+        if as_utc(r.expires_at) is not None and as_utc(r.expires_at) <= now
+    ]
     for row in rows:
         session.delete(row)
     if rows:

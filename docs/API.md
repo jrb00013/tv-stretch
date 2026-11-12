@@ -8,7 +8,10 @@ Base URL: `http://localhost:8000` (or your host). OpenAPI UI: `/docs`. Root `/` 
   For **browser testing** (no custom headers), the same credentials may be passed as query parameters:  
   `ws://host/ws/device?home_id=<uuid>&token=<api_key>` (or `api_key=` instead of `token=`).
 
-- **Apps** (phone / automation): `X-Control-Token: <home.control_token>` on REST routes under `/homes`, `/rooms`, `/nodes`, `/sessions`, `/spatial`, `/presence`, etc.
+- **Apps** (phone / automation): `X-Control-Token: <home.control_token>` on REST routes under `/homes`, `/rooms`, `/nodes`, `/sessions`, `/scenes`, `/spatial`, `/presence`, etc.
+
+- `PATCH /homes/{home_id}` — rename: `{ "name": "new name" }` (token must match that home).
+- `GET /homes` / `GET /homes/{id}` — scoped to the authenticated home only.
 
 - **App WebSocket** `/ws/app`: `Authorization: Bearer <control_token>` + `X-TV-Stretch-Home: <home_uuid>`, **or** query params `?home_id=<uuid>&token=<control_token>` (required for browsers).
 
@@ -36,6 +39,14 @@ curl -sS -X POST http://localhost:8000/nodes/register \
 ```
 
 Save `api_key` into firmware NVS (or Kconfig for dev).
+
+## Scene presets
+
+Saved handoff profiles for a home (same quiet-hours / webhook path as REST handoff):
+
+- `POST /scenes` — `{ "name": "movie night", "room_id": "<ROOM_UUID>", "content_ref": "optional", "standby_others": true }`
+- `GET /scenes` / `GET /scenes/{id}` / `PATCH /scenes/{id}` / `DELETE /scenes/{id}`
+- `POST /scenes/{id}/apply` — runs the coordinator handoff (`batch_id` + `commands`); respects quiet hours unless `?override_quiet_hours=true`
 
 ## Handoff (REST)
 

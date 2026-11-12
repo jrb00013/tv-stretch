@@ -22,6 +22,7 @@ from app.api import (
     quiet_hours,
     rollout,
     rooms,
+    scenes,
     sessions,
     spatial,
     webhooks,
@@ -95,6 +96,7 @@ app.include_router(homes.router)
 app.include_router(rooms.router)
 app.include_router(nodes.router)
 app.include_router(sessions.router)
+app.include_router(scenes.router)
 app.include_router(spatial.router)
 app.include_router(content.router)
 app.include_router(webhooks.router)

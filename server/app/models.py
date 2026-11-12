@@ -11,6 +11,20 @@ def utcnow() -> datetime:
     return datetime.now(UTC)
 
 
+def as_utc(value: datetime | None) -> datetime | None:
+    """Treat naive datetimes (e.g. SQLite round-trips) as UTC."""
+    if value is None:
+        return None
+    return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+
+
+def isoformat_utc(value: datetime) -> str:
+    """Serialize a datetime with an explicit UTC offset for API clients."""
+    aware = as_utc(value)
+    assert aware is not None
+    return aware.isoformat()
+
+
 class Home(SQLModel, table=True):
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
     name: str = Field(index=True)
@@ -68,6 +82,18 @@ class OccupancyEvent(SQLModel, table=True):
     pose_yaw: float | None = Field(default=None)
     map_id: uuid.UUID | None = Field(default=None, foreign_key="spatialmap.id")
     created_at: datetime = Field(default_factory=utcnow, index=True)
+
+
+class ScenePreset(SQLModel, table=True):
+    """Named room + content handoff preset for one-tap apply."""
+
+    id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    home_id: uuid.UUID = Field(foreign_key="home.id", index=True)
+    name: str = Field(index=True)
+    room_id: uuid.UUID = Field(foreign_key="room.id", index=True)
+    content_ref: str | None = Field(default=None, sa_column=Column(Text, nullable=True))
+    standby_others: bool = Field(default=True)
+    created_at: datetime = Field(default_factory=utcnow)
 
 
 class EventLog(SQLModel, table=True):
